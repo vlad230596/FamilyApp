@@ -23,6 +23,13 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.teardown_appcontext(close_db)
     app.register_blueprint(api)
 
+    @app.after_request
+    def add_local_dev_cors_headers(response):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        return response
+
     with app.app_context():
         init_db()
 

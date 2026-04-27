@@ -77,7 +77,10 @@ def test_cancel_active_restriction(client):
         },
     ).get_json()["restriction"]
 
-    response = client.post(f"/api/restrictions/{created['id']}/cancel", json={"note": "Помирились"})
+    response = client.post(
+        f"/api/restrictions/{created['id']}/cancel",
+        json={"note": "Помирились"},
+    )
 
     assert response.status_code == 200
     restriction = response.get_json()["restriction"]

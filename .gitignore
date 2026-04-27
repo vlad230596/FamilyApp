@@ -25,3 +25,4 @@ build/
 !.vscode/settings.json
 .DS_Store
 Thumbs.db
+/app/.metadata
