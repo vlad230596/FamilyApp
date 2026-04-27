@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "familyapp-backend"
+version = "0.1.0"
+description = "Flask backend for FamilyApp."
+authors = ["FamilyApp"]
+readme = "../README.md"
+packages = [{ include = "familyapp" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+flask = "^3.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
