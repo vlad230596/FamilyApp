@@ -9,6 +9,12 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.tmp/
+backend/.test-tmp/
+backend/test_tmp/
+backend/tmp_pytest_*/
+backend/*-dev.log
+app/flutter-web*.log
 .coverage
 htmlcov/
 .venv/

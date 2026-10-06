@@ -1,0 +1,1 @@
+familyapp-deploy ALL=(root) NOPASSWD: /usr/local/sbin/familyapp-deploy

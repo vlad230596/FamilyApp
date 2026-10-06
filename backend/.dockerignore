@@ -1,0 +1,6 @@
+*
+!pyproject.toml
+!poetry.lock
+!familyapp/
+!familyapp/**
+**/__pycache__/

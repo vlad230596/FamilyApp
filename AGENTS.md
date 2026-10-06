@@ -89,8 +89,18 @@ Use `restriction` as the English domain term for punishment-related features.
 
 Initial domain concepts:
 
-- `ParentAdmin` - a parent who can manage family settings and restrictions.
-- `Child` - a child in the family.
+- `User` - an independent account with login and password, optionally linked to
+  members in one or more families.
+- `Family` - a private group with its own members, restrictions, and settings.
+- `Member` - a participant in one family with a role: `parent` or `child`. A member
+  may be linked to a user; members without a user cannot sign in.
+- `Invitation` - one-time, time-limited permission to join a family or link a user
+  to an existing member. Its role is chosen by a parent.
+- Parents (all equal) manage family settings and restrictions. Children see
+  their own data and can do limited actions.
+- `Chore` - a household task with a schedule (daily or chosen weekdays) and an
+  optional duty member per weekday. Planned, see `docs/iteration-3-plan.md`.
+- `ShoppingItem` - an item on the shared shopping list with an urgency. Planned.
 - `Restriction` - a time-bounded restriction assigned to a child.
 - Restriction fields should include child, start date, end date, reason, status,
   and audit information for who created or changed it.
@@ -113,5 +123,13 @@ Initial domain concepts:
 ## Future Integration
 
 Yandex Alice integration is planned but should not be implemented yet unless
-explicitly requested. Keep backend design reasonably API-friendly so a future
-Alice skill can query child restriction status.
+explicitly requested. The integration will be broad: restriction status, who is
+on duty today, marking duties as done, and the shopping list. Keep all business
+logic on the backend (the Flutter app is just one client) and keep the API
+voice-friendly so a future Alice skill can use it.
+
+Voice commands cannot tell who is speaking, so Alice may read anything and add
+shopping items, but a duty marked done by voice is only a draft until a parent
+confirms it in the app. Restrictions and ratings are changed only in the app.
+
+The backend is deployed in Docker on a separate VDS shared with other projects.

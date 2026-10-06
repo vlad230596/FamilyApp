@@ -1,0 +1,48 @@
+name: familyapp
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /app/instance:size=1m,uid=10001,gid=10001
+    environment:
+      FAMILYAPP_DATABASE: /data/familyapp.sqlite3
+    volumes:
+      - data:/data
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks:
+      familyapp-ingress:
+        aliases: [familyapp-backend]
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  web:
+    image: ${WEB_IMAGE:?set WEB_IMAGE}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks:
+      familyapp-ingress:
+        aliases: [familyapp-web]
+    logging: *logging
+volumes:
+  data:
+networks:
+  familyapp-ingress:
+    external: true

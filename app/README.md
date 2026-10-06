@@ -1,17 +1,22 @@
-# familyapp
+# FamilyApp Flutter
 
-A new Flutter project.
+Flutter client for the FamilyApp restriction calendar.
 
-## Getting Started
+## Run Locally
 
-This project is a starting point for a Flutter application.
+```powershell
+.\scripts\setup_vscode_flutter_env.ps1 -Run "flutter pub get"
+.\scripts\setup_vscode_flutter_env.ps1 -Run "flutter run -d chrome --dart-define API_BASE_URL=http://127.0.0.1:5055"
+```
 
-A few resources to get you started if this is your first Flutter project:
+## Checks
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```powershell
+.\scripts\setup_vscode_flutter_env.ps1 -Run "flutter analyze"
+.\scripts\setup_vscode_flutter_env.ps1 -Run "flutter test"
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The app uses three primary destinations: calendar, full restriction history, and
+settings. The calendar opens on today by default and shows the selected-day
+restriction count. Child names, child icons, and restriction type management
+live in settings.
