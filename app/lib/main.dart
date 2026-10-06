@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:familyapp/screens/auth_screen.dart';
 import 'package:familyapp/screens/family_screen.dart';
@@ -17,6 +18,9 @@ class FamilyApp extends StatelessWidget {
     return MaterialApp(
       title: 'FamilyApp',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('ru'),
+      supportedLocales: const [Locale('ru')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2F6B4F)),
         useMaterial3: true,

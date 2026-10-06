@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart';
 import 'package:http/http.dart' as http;
 import 'package:familyapp/models/child.dart';
+import 'package:familyapp/models/chore.dart';
 import 'package:familyapp/models/member.dart';
 import 'package:familyapp/models/restriction.dart';
 import 'package:familyapp/models/restriction_type.dart';
@@ -74,6 +75,40 @@ class ApiClient {
 
   Future<void> logout() async {
     await _post('/api/auth/logout', {});
+  }
+
+  Future<List<Chore>> listChores() async {
+    final data = await _get('/api/chores');
+    return (data['chores'] as List)
+        .map((item) => Chore.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  Future<void> saveChore(Map<String, dynamic> data, {int? id}) async {
+    await _post(id == null ? '/api/chores' : '/api/chores/$id', data);
+  }
+
+  Future<void> answerChore(
+    int id,
+    String date,
+    bool answer,
+    int revision,
+  ) async {
+    await _post('/api/chores/$id/answers', {
+      'occurrence_date': date,
+      'answer': answer,
+      'revision': revision,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> choreHistory(int id) async {
+    final data = await _get('/api/chores/$id/answers');
+    return (data['answers'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> choreReminders() async {
+    final data = await _get('/api/chores/reminders');
+    return (data['reminders'] as List).cast<Map<String, dynamic>>();
   }
 
   Future<Member> me() async {
@@ -260,6 +295,21 @@ class ApiClient {
 }
 
 const _errorTranslations = {
+  'only responsible member may answer': 'Ответить может только ответственный.',
+  'chore access denied': 'Эта задача назначена другому участнику.',
+  'chore not found': 'Задача не найдена в этой семье.',
+  'responsible member needs an account':
+      'Ответственному нужен доступ в приложение.',
+  'responsible member is required': 'Выберите ответственного.',
+  'chore title must be 1-200 characters': 'Название: от 1 до 200 символов.',
+  'interval_days must be 1-365': 'Интервал: от 1 до 365 дней.',
+  'chore changed; refresh before answering':
+      'Задача изменена. Обновите список перед ответом.',
+  'check is not due':
+      'Время этой проверки ещё не наступило или задача приостановлена.',
+  'check already answered': 'Ответ на эту проверку уже сохранён.',
+  'timezone must be an IANA name':
+      'Укажите часовой пояс, например Europe/Moscow.',
   'invitation invalid or expired':
       'Приглашение недействительно или срок действия истёк.',
   'already a family member': 'Вы уже состоите в этой семье.',

@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:familyapp/api/api_client.dart';
 import 'package:familyapp/models/member.dart';
 import 'package:familyapp/state/family_store.dart';
+import 'package:familyapp/services/chore_notifications.dart';
 
 /// Persists the session token between app launches.
 class TokenStorage {
@@ -73,11 +74,13 @@ class AuthStore extends Notifier<AuthState> {
         }
       }
       state = const AuthState(status: AuthStatus.signedOut);
+      await _clearReminders();
     } catch (exception) {
       state = AuthState(
         status: AuthStatus.signedOut,
         error: exception.toString(),
       );
+      await _clearReminders();
     }
   }
 
@@ -136,6 +139,7 @@ class AuthStore extends Notifier<AuthState> {
   }
 
   void chooseFamily() {
+    _clearReminders();
     state = AuthState(
       status: AuthStatus.familyRequired,
       account: state.account,
@@ -146,11 +150,15 @@ class AuthStore extends Notifier<AuthState> {
     final member = data['member'] == null
         ? null
         : Member.fromJson(data['member']);
+    final changedMember =
+        state.member != null && state.member?.id != member?.id;
     state = AuthState(
       status: member == null ? AuthStatus.familyRequired : AuthStatus.signedIn,
       member: member,
       account: data,
     );
+    // A normal restore keeps visible unanswered alerts. Sync filters their owner.
+    if (changedMember || member == null) _clearReminders();
     ref.invalidate(familyStoreProvider);
   }
 
@@ -184,9 +192,19 @@ class AuthStore extends Notifier<AuthState> {
 
   Future<void> _clearSession({String? error}) async {
     ref.read(apiClientProvider).token = null;
+    // Invalidate in-flight task syncs before awaiting platform cancellation.
+    state = AuthState(status: AuthStatus.signedOut, error: error);
+    await _clearReminders();
     await ref.read(tokenStorageProvider).delete();
     ref.invalidate(familyStoreProvider);
-    state = AuthState(status: AuthStatus.signedOut, error: error);
+  }
+
+  Future<void> _clearReminders() async {
+    try {
+      await ref.read(choreNotificationsProvider).clear();
+    } catch (_) {
+      // Local authentication must still work if notifications are unavailable.
+    }
   }
 }
 

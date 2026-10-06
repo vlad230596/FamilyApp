@@ -32,7 +32,11 @@ Never use the root administration key for CI.
 
 ## Releases
 
-The owner commits and pushes the source and workflow. Publish a GitHub Release
+The owner or an authorized agent commits and pushes the source and workflow.
+A request to publish a release authorizes an agent to commit and push its scoped
+changes, create the version tag, and publish the release using the existing
+workflows. Unrelated local changes must remain outside that release.
+Publish a GitHub Release
 with a version tag such as `0.1.0` targeting that commit. Release tags use
 `MAJOR.MINOR.PATCH` without a `v` prefix. `release.yml` runs
 backend tests, Flutter analysis and tests, builds the web client and Docker

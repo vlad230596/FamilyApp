@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:familyapp/api/api_client.dart';
 import 'package:familyapp/main.dart';
 import 'package:familyapp/models/child.dart';
+import 'package:familyapp/models/chore.dart';
 import 'package:familyapp/models/member.dart';
 import 'package:familyapp/models/restriction.dart';
 import 'package:familyapp/models/restriction_type.dart';
@@ -17,6 +18,7 @@ void main() {
     required FakeApiClient api,
     String? savedToken,
   }) async {
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -235,6 +237,12 @@ class FakeApiClient extends ApiClient {
 
   @override
   Future<List<Child>> listChildren() async => [];
+
+  @override
+  Future<List<Chore>> listChores() async => [];
+
+  @override
+  Future<List<Map<String, dynamic>>> choreReminders() async => [];
 
   @override
   Future<List<RestrictionType>> listRestrictionTypes() async => [];

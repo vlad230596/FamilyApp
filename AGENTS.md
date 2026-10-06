@@ -21,7 +21,11 @@ are English.
 - Make straightforward implementation changes autonomously.
 - Ask before architectural decisions, destructive operations, broad refactors, or
   changes that affect unrelated areas.
-- Do not create commits. The project owner commits manually.
+- Agents may create focused commits and push changes as part of an explicitly
+  requested task or release. A request to publish a release authorizes committing
+  and pushing the changes needed for that release, creating its version tag,
+  and publishing it through the existing release workflows without asking again.
+- Include only changes within the authorized task scope in each commit and release.
 - Do not revert, overwrite, or remove user changes unless explicitly requested.
 - Keep changes focused on the current task.
 - Use release tags in `MAJOR.MINOR.PATCH` format without a `v` prefix, for example `0.1.0`.

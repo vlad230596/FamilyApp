@@ -45,6 +45,23 @@ Alice integration comes after these stages.
   and suggests who owes a day.
 - Each chore has its own reminder time.
 
+#### Implemented First Slice: Regular Checks
+
+- The Tasks tab supports interval-based checks (every N days, 1-365) and chosen
+  weekdays, with a start date, reminder time, and an explicit IANA timezone.
+- Each check has exactly one responsible member with an app account. Only that
+  member receives reminders and submits the Yes/No answer. Parents manage the
+  definitions; children may answer their assigned checks directly.
+- Yes and No both close that occurrence; an unanswered check remains separate.
+  No repeat reminder after No. Immutable answers and definition snapshots
+  preserve history through schedule edits, reassignment, and pauses.
+- Android schedules local reminders for up to 60 days (nearest 200 alerts),
+  refreshed on app open/resume and while foregrounded. Notification actions
+  open the app to authenticate and save the answer. Web supports forms and
+  answers only. Background synchronization is not implemented yet.
+- Duty ratings, parent confirmation, away periods, and fairness remain planned
+  for the later duties workflow, rather than this simple recurring-check flow.
+
 ### Shopping List
 
 - One shared, persistent list. Any member can add items.

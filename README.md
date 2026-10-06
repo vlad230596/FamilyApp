@@ -58,11 +58,45 @@ cd app
   markers, selected-day restriction count, details, and an optional child filter.
 - `Ограничения`: full restriction history, including active, expired, and
   cancelled items.
+- `Задачи`: recurring checks with one responsible member, a start date,
+  an interval of 1-365 calendar days or selected weekdays, a reminder time,
+  and an IANA timezone. Parents create, edit, reassign, and pause tasks.
+  Only the responsible member can answer Yes or No; both answers finish that
+  occurrence. No answer remains distinct from No. History preserves the
+  original title, actor, schedule revision, and answer timestamp.
 - `Настройки`: own account (change password, sign out), family members with
   roles and app access, and reusable restriction type management.
 
 Parents manage everything. Children see only their own restrictions and cannot
 change restrictions, types, or members.
+
+## Regular Task Reminders
+
+- Android reminders use `flutter_local_notifications`, without Firebase or a
+  server queue. Only the assigned member's selected family is scheduled.
+- Enable notifications from the Tasks tab. Exact alarm permission is optional:
+  without it Android may delay delivery. Notification contents are private on
+  the lock screen. Yes/No actions open the app and submit an authenticated answer;
+  internet access is required to save it. Failed answers remain available in
+  the task list and are not queued offline.
+- A sync schedules the next 60 days, capped at the nearest 200 notifications.
+  Open the app regularly to replenish the schedule. Sync runs on opening,
+  resuming, manual refresh, and every minute while the app is in the foreground.
+  There is no background network sync yet. Reboot restores scheduled alarms.
+- Changes on another phone take effect only after this phone syncs. Old alerts
+  cannot submit answers after reassignment, pause, or a schedule edit. Signing
+  out or choosing another family cancels local reminders.
+- The timezone belongs to the task, so travel does not move its reminder time.
+  Android defaults to the device timezone; web defaults to Moscow for UTC+3
+  and UTC otherwise. The timezone is editable in the form.
+- Web supports task management and answers, but does not schedule notifications.
+- The list offers the latest due check; older unanswered checks are not rolled
+  into a debt. Ratings, parent confirmation, and fairness statistics are deferred.
+
+API: `GET|POST /api/chores`, `POST /api/chores/<id>`,
+`GET|POST /api/chores/<id>/answers`, `GET /api/chores/reminders`.
+Creating and editing require a parent; answering requires the assigned member.
+Answers include `occurrence_date`, boolean `answer`, and current `revision`.
 
 Restriction creation supports reusable colored types and one-off custom
 restrictions. The form uses a start date plus duration in days, weeks, or months

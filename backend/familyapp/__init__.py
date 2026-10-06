@@ -45,5 +45,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     with app.app_context():
         init_db()
+        from .chores import init_chores
+        init_chores()
 
     return app

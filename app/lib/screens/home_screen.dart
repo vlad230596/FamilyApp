@@ -1,6 +1,13 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:familyapp/dialogs/restriction_dialog.dart';
+import 'package:familyapp/dialogs/chore_dialog.dart';
+import 'package:familyapp/screens/chores_page.dart';
+import 'package:familyapp/services/chore_notifications.dart';
+import 'package:familyapp/state/chore_store.dart';
 import 'package:familyapp/screens/calendar_page.dart';
 import 'package:familyapp/screens/restriction_history_page.dart';
 import 'package:familyapp/screens/settings_page.dart';
@@ -14,8 +21,110 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   var _index = 0;
+  Timer? _timer;
+  late final ChoreNotifications _notifications;
+
+  @override
+  void initState() {
+    super.initState();
+    _notifications = ref.read(choreNotificationsProvider);
+    ref.read(choreStoreProvider);
+    WidgetsBinding.instance.addObserver(this);
+    _startTimer();
+    Future.microtask(() async {
+      if (!mounted) return;
+      final notifications = _notifications;
+      try {
+        await notifications.initialize();
+        if (!mounted) return;
+        notifications.onResponse = _notificationResponse;
+        final response = notifications.takePendingResponse();
+        if (response != null) await _notificationResponse(response);
+      } catch (_) {
+        // The task list remains available if Android initialization fails.
+      }
+    });
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      ref.read(choreStoreProvider.notifier).refresh();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startTimer();
+      ref.read(choreStoreProvider.notifier).refresh();
+    } else {
+      _timer?.cancel();
+    }
+  }
+
+  Future<void> _notificationResponse(NotificationResponse response) async {
+    if (!mounted) return;
+    setState(() => _index = 2);
+    if (response.actionId != 'yes' && response.actionId != 'no') return;
+    try {
+      final data = jsonDecode(response.payload!) as Map<String, dynamic>;
+      final auth = ref.read(authStoreProvider);
+      if (auth.member?.id != data['member_id'] ||
+          auth.account?['family_id'] != data['family_id']) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Напоминание относится к другому участнику или семье.',
+            ),
+          ),
+        );
+        return;
+      }
+      final store = ref.read(choreStoreProvider.notifier);
+      // A sync may already be in progress when Android launches the app.
+      for (
+        var attempt = 0;
+        attempt < 50 && ref.read(choreStoreProvider).busy;
+        attempt++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        if (!mounted) return;
+      }
+      final saved = await store.answer(
+        data['chore_id'] as int,
+        data['occurrence_date'] as String,
+        response.actionId == 'yes',
+        data['revision'] as int,
+      );
+      if (mounted && saved) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Ответ сохранён.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Не удалось обработать напоминание. Ответьте в списке задач.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _notifications.onResponse = null;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +138,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         showChildFilter: canManage,
       ),
       RestrictionHistoryPage(state: store, controller: controller),
+      const ChoresPage(),
       SettingsPage(state: store, controller: controller),
     ];
 
@@ -37,12 +147,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: Text(switch (_index) {
           0 => 'Календарь',
           1 => 'Ограничения',
+          2 => 'Регулярные задачи',
           _ => 'Настройки',
         }),
         actions: [
           IconButton(
             tooltip: 'Обновить',
-            onPressed: store.loading ? null : controller.refresh,
+            onPressed: store.loading
+                ? null
+                : () {
+                    controller.refresh();
+                    ref.read(choreStoreProvider.notifier).refresh();
+                  },
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -65,22 +181,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
       ),
-      floatingActionButton: _index == 2 || !canManage
+      floatingActionButton: _index == 3 || !canManage
           ? null
           : MediaQuery.sizeOf(context).width < 600
           // Icon-only on phones: card actions are left-aligned, so a compact
           // button in the corner does not cover them.
           ? FloatingActionButton(
-              tooltip: 'Добавить ограничение',
-              onPressed: () =>
-                  showRestrictionDialog(context, store, controller),
+              tooltip: _index == 2 ? 'Добавить задачу' : 'Добавить ограничение',
+              onPressed: () => _index == 2
+                  ? showChoreDialog(context)
+                  : showRestrictionDialog(context, store, controller),
               child: const Icon(Icons.add),
             )
           : FloatingActionButton.extended(
-              onPressed: () =>
-                  showRestrictionDialog(context, store, controller),
+              onPressed: () => _index == 2
+                  ? showChoreDialog(context)
+                  : showRestrictionDialog(context, store, controller),
               icon: const Icon(Icons.add),
-              label: const Text('Ограничение'),
+              label: Text(_index == 2 ? 'Задача' : 'Ограничение'),
             ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
@@ -95,6 +213,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             icon: Icon(Icons.event_note_outlined),
             selectedIcon: Icon(Icons.event_note),
             label: 'Ограничения',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.task_alt_outlined),
+            selectedIcon: Icon(Icons.task_alt),
+            label: 'Задачи',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

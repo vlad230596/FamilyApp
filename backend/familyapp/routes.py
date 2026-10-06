@@ -40,6 +40,7 @@ from .persistence import (
     list_restrictions_for_range,
     list_today_restrictions,
 )
+from .chores import list_chores, save_chore, answer_chore, answer_history, reminders
 
 api = Blueprint("api", __name__)
 
@@ -101,6 +102,38 @@ def request_payload() -> dict:
     if request.is_json:
         return request.get_json(silent=True) or {}
     return request.form.to_dict()
+
+
+@api.get("/api/chores")
+def chores_list():
+    return jsonify(chores=list_chores())
+
+
+@api.post("/api/chores")
+@parent_required
+def chores_create():
+    return jsonify(chore=save_chore(request_payload())), 201
+
+
+@api.post("/api/chores/<int:chore_id>")
+@parent_required
+def chores_update(chore_id):
+    return jsonify(chore=save_chore(request_payload(), chore_id))
+
+
+@api.post("/api/chores/<int:chore_id>/answers")
+def chores_answer(chore_id):
+    return jsonify(chore=answer_chore(chore_id, request_payload()))
+
+
+@api.get("/api/chores/<int:chore_id>/answers")
+def chores_history(chore_id):
+    return jsonify(answers=answer_history(chore_id))
+
+
+@api.get("/api/chores/reminders")
+def chores_reminders():
+    return jsonify(reminders=reminders())
 
 
 @api.get("/health")
