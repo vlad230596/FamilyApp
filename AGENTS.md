@@ -24,6 +24,7 @@ are English.
 - Do not create commits. The project owner commits manually.
 - Do not revert, overwrite, or remove user changes unless explicitly requested.
 - Keep changes focused on the current task.
+- Use release tags in `MAJOR.MINOR.PATCH` format without a `v` prefix, for example `0.1.0`.
 - Before larger edits, briefly explain the intended approach.
 - After changes, run relevant checks and, when applicable, start the app so it can
   be tested locally.

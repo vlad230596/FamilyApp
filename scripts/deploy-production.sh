@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 [[ $# == 4 ]] || exit 64
 version=$1 backend=$2 web=$3 registry_user=$4
-[[ "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 64
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 64
 [[ "$backend" =~ ^ghcr\.io/vlad230596/familyapp-backend@sha256:[a-f0-9]{64}$ ]] || exit 64
 [[ "$web" =~ ^ghcr\.io/vlad230596/familyapp-web@sha256:[a-f0-9]{64}$ ]] || exit 64
 [[ "$registry_user" =~ ^[a-zA-Z0-9_-]+$ ]] || exit 64

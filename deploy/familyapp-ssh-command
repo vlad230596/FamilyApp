@@ -2,6 +2,6 @@
 set -euo pipefail
 # The CI account can invoke only the fixed, root-owned deployment script.
 command=${SSH_ORIGINAL_COMMAND:-}
-pattern='^deploy (v?[0-9]+\.[0-9]+\.[0-9]+) (ghcr\.io/vlad230596/familyapp-backend@sha256:[a-f0-9]{64}) (ghcr\.io/vlad230596/familyapp-web@sha256:[a-f0-9]{64}) ([a-zA-Z0-9_-]+)$'
+pattern='^deploy ([0-9]+\.[0-9]+\.[0-9]+) (ghcr\.io/vlad230596/familyapp-backend@sha256:[a-f0-9]{64}) (ghcr\.io/vlad230596/familyapp-web@sha256:[a-f0-9]{64}) ([a-zA-Z0-9_-]+)$'
 [[ "$command" =~ $pattern ]] || exit 64
 exec sudo /usr/local/sbin/familyapp-deploy "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}"

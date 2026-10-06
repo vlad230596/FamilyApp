@@ -33,7 +33,8 @@ Never use the root administration key for CI.
 ## Releases
 
 The owner commits and pushes the source and workflow. Publish a GitHub Release
-with a version tag such as `v0.1.0` targeting that commit. `release.yml` runs
+with a version tag such as `0.1.0` targeting that commit. Release tags use
+`MAJOR.MINOR.PATCH` without a `v` prefix. `release.yml` runs
 backend tests, Flutter analysis and tests, builds the web client and Docker
 images, pushes to GHCR, and deploys the exact image digests. A manual workflow
 run can retry an existing version tag. The server does not build release images.
