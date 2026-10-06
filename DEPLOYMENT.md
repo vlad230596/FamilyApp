@@ -39,8 +39,19 @@ backend tests, Flutter analysis and tests, builds the web client and Docker
 images, pushes to GHCR, and deploys the exact image digests. A manual workflow
 run can retry an existing version tag. The server does not build release images.
 
-This workflow deploys the web app and backend; Android APK publication and
-release signing are not configured yet.
+`apk-release.yml` separately builds a signed universal Android APK on each
+published release and attaches it with a SHA-256 checksum and build provenance.
+The APK uses the production API origin. For a packaging fix to an existing
+release, the manual workflow accepts an explicit source commit; the build
+provenance records that commit without moving the original release tag.
+
+Android signing uses repository secrets `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`.
+Keep the original keystore and passwords backed up outside the repository;
+future APK updates must use the same key. Release builds require the
+`FAMILYAPP_ANDROID_KEYSTORE_PATH`, `FAMILYAPP_ANDROID_KEYSTORE_PASSWORD`,
+`FAMILYAPP_ANDROID_KEY_ALIAS`, and `FAMILYAPP_ANDROID_KEY_PASSWORD` environment
+variables and never fall back to a debug signing key.
 
 The first release creates an empty database. Before subsequent releases the
 deployment uses SQLite's backup API to save a consistent snapshot under

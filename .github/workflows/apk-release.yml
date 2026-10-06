@@ -1,0 +1,79 @@
+name: Android APK release
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release version without v (for example 0.1.0)
+        required: true
+        type: string
+      source_ref:
+        description: Optional source commit for packaging fixes to an existing release
+        required: false
+        type: string
+concurrency:
+  group: familyapp-android-release
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.tag || github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_ref || inputs.tag || github.event.release.tag_name }}
+      - name: Validate target release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 64
+          gh release view "$VERSION" >/dev/null
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.41.8'
+          channel: stable
+          cache: true
+      - name: Configure signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/familyapp-release.jks"
+          chmod 600 "$RUNNER_TEMP/familyapp-release.jks"
+      - name: Check and build signed APK
+        working-directory: app
+        env:
+          FAMILYAPP_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/familyapp-release.jks
+          FAMILYAPP_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FAMILYAPP_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          FAMILYAPP_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+          # Use a monotonic timestamp so APK updates also work after manual rebuilds.
+          build_number=$(date -u +%s)
+          flutter build apk --release --build-name "$VERSION" --build-number "$build_number" \
+            --dart-define=API_BASE_URL=https://famly-app.duckdns.org:8443
+          cp build/app/outputs/flutter-apk/app-release.apk "../familyapp-$VERSION.apk"
+          cd ..
+          sha256sum "familyapp-$VERSION.apk" > "familyapp-$VERSION.apk.sha256"
+          printf 'Source commit: %s\nVersion: %s\nBuild number: %s\nAPI: https://famly-app.duckdns.org:8443\n' \
+            "$(git rev-parse HEAD)" "$VERSION" "$build_number" > "familyapp-$VERSION.build.txt"
+      - name: Publish APK assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$VERSION" "familyapp-$VERSION.apk" \
+            "familyapp-$VERSION.apk.sha256" "familyapp-$VERSION.build.txt" --clobber
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/familyapp-release.jks"
