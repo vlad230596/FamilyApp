@@ -11,7 +11,7 @@ famly-app.duckdns.org:8443 {
     request_body {
         max_size 1MB
     }
-    @api path /api/* /health
+    @api path /api/* /health /integrations/alice/*
     handle @api {
         reverse_proxy familyapp-backend:8000
     }

@@ -21,6 +21,9 @@ See [Iteration 1 Plan](docs/iteration-1-plan.md),
 See [Deployment](DEPLOYMENT.md) for GitHub Releases, the shared VDS ingress,
 and interactive setup of the initial parent accounts.
 
+See [Alice integration](docs/alice.md) for the read-only voice webhook, family
+account linking, server configuration, and Yandex Dialogs console settings.
+
 ## Local Development
 
 Backend:

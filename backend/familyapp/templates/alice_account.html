@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Алиса — FamilyApp</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #0f172a; background: #f8fafc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px; line-height: 1.55; font-size: 16px; }
+    main { max-width: 480px; margin: 5vh auto; padding: 28px; background: white; border: 1px solid #cbd5e1; border-radius: 20px; }
+    h1 { font-size: 26px; line-height: 1.25; margin-top: 0; }
+    p { color: #475569; overflow-wrap: anywhere; }
+    label { display: block; margin: 16px 0 6px; font-weight: 600; }
+    input, select, button { font: inherit; min-height: 48px; width: 100%; border-radius: 10px; }
+    input, select { padding: 10px; border: 1px solid #64748b; background: white; color: #0f172a; }
+    button { margin-top: 20px; padding: 12px; border: 0; background: #1e3a8a; color: white; cursor: pointer; font-weight: 600; }
+    button:hover { background: #172554; }
+    button.secondary { background: #e2e8f0; color: #0f172a; margin-top: 12px; }
+    :focus-visible { outline: 3px solid #a16207; outline-offset: 3px; }
+    .notice { padding: 12px; border-radius: 10px; background: #f1f5f9; }
+    .error { color: #991b1b; background: #fef2f2; }
+    .connection { border-top: 1px solid #cbd5e1; padding-top: 12px; margin-top: 20px; }
+    a { color: #1e3a8a; text-underline-offset: 3px; }
+    @media (max-width: 380px) { main { padding: 20px; } }
+  </style>
+</head>
+<body><main>
+  <h1>{{ 'Подключение Алисы' if flow.mode == 'authorize' else 'Доступ Алисы' }}</h1>
+  {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
+  {% if message %}<p class="notice" role="status">{{ message }}</p>{% endif %}
+  {% if not authenticated %}
+    <p>Войдите под своей учётной записью родителя в FamilyApp.</p>
+    <form method="post">
+      <input type="hidden" name="csrf" value="{{ flow.csrf }}">
+      <label for="login">Логин FamilyApp</label>
+      <input id="login" name="login" autocomplete="username" maxlength="128" required>
+      <label for="password">Пароль</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
+      <button type="submit">Войти</button>
+      {% if flow.mode == 'authorize' %}<button class="secondary" type="submit" name="action" value="deny" formnovalidate>Отмена</button>{% endif %}
+    </form>
+  {% elif flow.mode == 'authorize' %}
+    <p>Выберите семью, данные которой сможет читать Алиса.</p>
+    <p class="notice">Все, кто разговаривает с колонкой, смогут узнавать ограничения детей этой семьи. Изменять ограничения через Алису нельзя.</p>
+    <form method="post">
+      <input type="hidden" name="csrf" value="{{ flow.csrf }}">
+      <label for="family">Семья</label>
+      <select id="family" name="family_id" required>{% for family in families %}<option value="{{ family.id }}">{{ family.name }}</option>{% endfor %}</select>
+      <button type="submit" name="action" value="allow">Разрешить чтение ограничений</button>
+      <button class="secondary" type="submit" name="action" value="deny">Отмена</button>
+    </form>
+    <p>Отключить доступ можно на странице <a href="/integrations/alice/manage">«Доступ Алисы»</a>.</p>
+  {% else %}
+    <p>Ваши подключения к Алисе. Отключение сразу прекращает доступ к данным выбранной привязки.</p>
+    {% for connection in connections %}
+    <form class="connection" method="post">
+      <strong>{{ connection.name }}</strong>
+      <p>Подключение № {{ connection.id }}</p>
+      <input type="hidden" name="csrf" value="{{ flow.csrf }}">
+      <input type="hidden" name="grant_id" value="{{ connection.id }}">
+      <button class="secondary" type="submit">Отключить доступ</button>
+    </form>
+    {% else %}<p class="notice">Активных подключений нет.</p>{% endfor %}
+  {% endif %}
+</main></body>
+</html>

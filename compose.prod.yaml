@@ -10,6 +10,9 @@ services:
       - /app/instance:size=1m,uid=10001,gid=10001
     environment:
       FAMILYAPP_DATABASE: /data/familyapp.sqlite3
+    env_file:
+      - path: /opt/familyapp/.alice.env
+        required: false
     volumes:
       - data:/data
     healthcheck:
