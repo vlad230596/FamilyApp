@@ -14,6 +14,22 @@ def items(client):
     return client.get("/api/shopping").get_json()["items"]
 
 
+def test_alice_uses_only_the_current_main_list(alice_client):
+    access = token(alice_client)["access_token"]
+    original = alice_client.get('/api/shopping').get_json()['list_id']
+    alice_client.post('/api/shopping', json={'name': 'Молоко'})
+    second = alice_client.post('/api/shopping/lists', json={'name': 'Дача'}).get_json()['shopping_list']['id']
+    alice_client.post('/api/shopping', json={'name': 'Лопата', 'list_id': second})
+    read = voice(alice_client, access, 'прочитай список покупок')['response']['text']
+    assert 'Молоко' in read and 'Лопата' not in read
+    alice_client.post(f'/api/shopping/lists/{second}', json={'name': 'Дача', 'is_main': True})
+    read = voice(alice_client, access, 'прочитай список покупок')['response']['text']
+    assert 'Лопата' in read and 'Молоко' not in read
+    voice(alice_client, access, 'добавь в список грабли')
+    assert len(items(alice_client)) == 2
+    assert len(alice_client.get(f'/api/shopping?list_id={original}').get_json()['items']) == 1
+
+
 def test_read_add_and_duplicate_are_shared_and_one_shot(alice_client):
     access = token(alice_client)["access_token"]
     empty = voice(alice_client, access, "что нужно купить")

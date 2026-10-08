@@ -93,3 +93,67 @@ def test_invalid_return_period_keeps_item(client, days):
     item = add(client)
     assert client.post(f"/api/shopping/{item['id']}/buy", json={"return_in_days": days}).status_code == 400
     assert len(state(client)["items"]) == 1
+
+
+def test_multiple_lists_main_and_returns(client, monkeypatch):
+    original = add(client)
+    main = state(client)['list_id']
+    response = client.post('/api/shopping/lists', json={'name': 'Trip'})
+    assert response.status_code == 201
+    second = response.get_json()['shopping_list']['id']
+    item = add(client, list_id=second)
+    assert item['id'] != original['id']
+    assert len(state(client)['items']) == 1
+    assert client.get(f'/api/shopping?list_id={second}').get_json()['items'][0]['id'] == item['id']
+    client.post(f"/api/shopping/{item['id']}/buy", json={'return_in_days': 1})
+    assert state(client)['purchases'] == []
+    client.post(f'/api/shopping/lists/{second}', json={'name': 'Trip', 'is_main': True})
+    assert state(client)['list_id'] == second
+    assert sum(row['is_main'] for row in state(client)['lists']) == 1
+    monkeypatch.setattr('familyapp.shopping.utc_now', lambda: datetime(2026, 10, 9, 9, tzinfo=timezone.utc))
+    assert state(client)['items'][0]['list_id'] == second
+    assert client.get(f'/api/shopping?list_id={main}').get_json()['items'][0]['id'] == original['id']
+
+
+def test_list_permissions_and_isolation(client):
+    main = state(client)['list_id']
+    child = join(client, 'child')
+    assert child.post('/api/shopping/lists', json={'name': 'Other'}).status_code == 403
+    other = register_user(client.application.test_client())
+    other.post('/api/families', json={'name': 'Other'})
+    assert other.get(f'/api/shopping?list_id={main}').status_code == 400
+    assert other.post('/api/shopping', json={'name': 'Milk', 'list_id': main}).status_code == 400
+    assert other.post(f'/api/shopping/lists/{main}', json={'name': 'Changed', 'is_main': True}).status_code == 400
+    assert client.get('/api/shopping?list_id=wrong').status_code == 400
+
+
+def test_existing_single_list_migration(client):
+    from familyapp.persistence import get_db
+    from familyapp.shopping import init_shopping
+    item = add(client, name='Bread')
+    client.post(f"/api/shopping/{item['id']}/buy", json={'return_in_days': 7})
+    add(client, name='Milk')
+    with client.application.app_context():
+        db = get_db()
+        db.execute('ALTER TABLE shopping_items RENAME TO temp_items')
+        db.execute("""CREATE TABLE shopping_items (
+            id INTEGER PRIMARY KEY, family_id INTEGER NOT NULL, name TEXT NOT NULL,
+            normalized_name TEXT NOT NULL, urgency TEXT NOT NULL, category TEXT NOT NULL,
+            created_by_member_id INTEGER NOT NULL, updated_by_member_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL, urgency_since TEXT NOT NULL,
+            UNIQUE(family_id, normalized_name))""")
+        db.execute("""INSERT INTO shopping_items SELECT id, family_id, name, normalized_name,
+            urgency, category, created_by_member_id, updated_by_member_id, created_at, updated_at,
+            urgency_since FROM temp_items""")
+        db.execute('DROP TABLE temp_items')
+        db.execute('ALTER TABLE shopping_purchases DROP COLUMN list_id')
+        db.execute('DROP TABLE shopping_lists')
+        db.commit()
+        init_shopping()
+        init_shopping()
+    migrated = state(client)
+    assert len(migrated['lists']) == 1
+    assert migrated['items'][0]['name'] == 'Milk'
+    assert migrated['purchases'][0]['name'] == 'Bread'
+    assert migrated['purchases'][0]['return_at'] is not None
+    assert migrated['purchases'][0]['list_id'] == migrated['list_id']

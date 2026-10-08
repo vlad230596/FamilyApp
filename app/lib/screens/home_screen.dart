@@ -13,6 +13,9 @@ import 'package:familyapp/screens/restriction_history_page.dart';
 import 'package:familyapp/screens/settings_page.dart';
 import 'package:familyapp/state/auth_store.dart';
 import 'package:familyapp/state/family_store.dart';
+import 'package:familyapp/state/household_store.dart';
+import 'package:familyapp/screens/shopping_page.dart';
+import 'package:familyapp/dialogs/household_action_dialog.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -139,6 +142,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
       RestrictionHistoryPage(state: store, controller: controller),
       const ChoresPage(),
+      const ShoppingPage(),
       SettingsPage(state: store, controller: controller),
     ];
 
@@ -148,6 +152,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           0 => 'Календарь',
           1 => 'Ограничения',
           2 => 'Регулярные задачи',
+          3 => 'Покупки',
           _ => 'Настройки',
         }),
         actions: [
@@ -156,6 +161,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             onPressed: store.loading
                 ? null
                 : () {
+                    if (_index == 3) {
+                      ref.read(shoppingStoreProvider.notifier).refresh();
+                    }
                     controller.refresh();
                     ref.read(choreStoreProvider.notifier).refresh();
                   },
@@ -181,24 +189,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ],
         ),
       ),
-      floatingActionButton: _index == 3 || !canManage
+      floatingActionButton: _index == 4 || (!canManage && _index != 3)
           ? null
           : MediaQuery.sizeOf(context).width < 600
           // Icon-only on phones: card actions are left-aligned, so a compact
           // button in the corner does not cover them.
           ? FloatingActionButton(
-              tooltip: _index == 2 ? 'Добавить задачу' : 'Добавить ограничение',
-              onPressed: () => _index == 2
+              tooltip: _index == 3
+                  ? 'Добавить покупку'
+                  : _index == 2
+                  ? 'Добавить задачу'
+                  : 'Добавить ограничение',
+              onPressed: () => _index == 3
+                  ? showHouseholdAction(context, HouseholdAction.shopping)
+                  : _index == 2
                   ? showChoreDialog(context)
                   : showRestrictionDialog(context, store, controller),
               child: const Icon(Icons.add),
             )
           : FloatingActionButton.extended(
-              onPressed: () => _index == 2
+              onPressed: () => _index == 3
+                  ? showHouseholdAction(context, HouseholdAction.shopping)
+                  : _index == 2
                   ? showChoreDialog(context)
                   : showRestrictionDialog(context, store, controller),
               icon: const Icon(Icons.add),
-              label: Text(_index == 2 ? 'Задача' : 'Ограничение'),
+              label: Text(
+                _index == 3
+                    ? 'Покупка'
+                    : _index == 2
+                    ? 'Задача'
+                    : 'Ограничение',
+              ),
             ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
@@ -218,6 +240,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             icon: Icon(Icons.task_alt_outlined),
             selectedIcon: Icon(Icons.task_alt),
             label: 'Задачи',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.shopping_cart_outlined),
+            selectedIcon: Icon(Icons.shopping_cart),
+            label: 'Покупки',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

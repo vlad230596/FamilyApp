@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "familyapp-backend"
-version = "0.4.0"
+version = "0.5.0"
 description = "Flask backend for FamilyApp."
 authors = ["FamilyApp"]
 readme = "../README.md"

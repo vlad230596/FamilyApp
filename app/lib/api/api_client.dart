@@ -84,6 +84,36 @@ class ApiClient {
         .toList();
   }
 
+  Future<Map<String, dynamic>> shopping() => _get('/api/shopping');
+  Future<Map<String, dynamic>> shoppingList(int id) =>
+      _get('/api/shopping?list_id=$id');
+
+  Future<void> saveShoppingList(
+    String name, {
+    int? id,
+    bool main = false,
+  }) async {
+    await _post('/api/shopping/lists${id == null ? '' : '/$id'}', {
+      'name': name,
+      'is_main': main,
+    });
+  }
+
+  Future<void> addShopping(Map<String, dynamic> data) async {
+    await _post('/api/shopping', data);
+  }
+
+  Future<void> buyShopping(int id, int? days) async {
+    await _post('/api/shopping/$id/buy', {'return_in_days': days});
+  }
+
+  Future<void> returnShopping(int id, {bool cancel = false}) async {
+    await _post(
+      '/api/shopping/purchases/$id/${cancel ? 'cancel-return' : 'return'}',
+      {},
+    );
+  }
+
   Future<void> saveChore(Map<String, dynamic> data, {int? id}) async {
     await _post(id == null ? '/api/chores' : '/api/chores/$id', data);
   }
@@ -295,6 +325,20 @@ class ApiClient {
 }
 
 const _errorTranslations = {
+  'shopping name must be 1-200 characters':
+      'Название покупки: от 1 до 200 символов.',
+  'invalid shopping urgency': 'Выберите срочность.',
+  'shopping category must be up to 80 characters':
+      'Категория: не больше 80 символов.',
+  'return days must be 1-3650': 'Возврат: от 1 до 3650 дней.',
+  'shopping list name must be 1-80 characters':
+      'Название списка: от 1 до 80 символов.',
+  'shopping list not found': 'Список покупок не найден. Обновите список.',
+  'invalid main shopping list': 'Не удалось выбрать главный список.',
+  'shopping item not found':
+      'Покупка уже отмечена или не найдена. Обновите список.',
+  'purchase not found': 'Запись о покупке не найдена.',
+
   'only responsible member may answer': 'Ответить может только ответственный.',
   'chore access denied': 'Эта задача назначена другому участнику.',
   'chore not found': 'Задача не найдена в этой семье.',

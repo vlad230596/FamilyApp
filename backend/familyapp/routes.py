@@ -140,7 +140,19 @@ def chores_reminders():
 
 @api.get("/api/shopping")
 def shopping_list():
-    return jsonify(shopping.list_shopping())
+    return jsonify(shopping.list_shopping(None if request.args.get("list_id") is None else parse_positive_int(request.args.get("list_id"), "list_id")))
+
+
+@api.post("/api/shopping/lists")
+@parent_required
+def shopping_list_create():
+    return jsonify(shopping_list=shopping.save_list(request_payload())), 201
+
+
+@api.post("/api/shopping/lists/<int:list_id>")
+@parent_required
+def shopping_list_update(list_id):
+    return jsonify(shopping_list=shopping.save_list(request_payload(), list_id))
 
 
 @api.post("/api/shopping")
