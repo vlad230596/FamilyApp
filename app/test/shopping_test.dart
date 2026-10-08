@@ -43,18 +43,21 @@ void main() {
     await open(tester, api, const Size(320, 640));
     await tester.tap(find.text('Покупки').last);
     await tester.pumpAndSettle();
-    expect(
-      find.text('Алиса читает и добавляет покупки в этот список.'),
-      findsOneWidget,
-    );
+    expect(find.text('Главный семейный список'), findsOneWidget);
     await tester.tap(find.byType(DropdownButtonFormField<int>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Дача').last);
     await tester.pumpAndSettle();
     expect(api.selected, 2);
+    await tester.tap(find.text('Управление списками'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Сделать главным'));
     await tester.tap(find.text('Сделать главным'));
     await tester.pumpAndSettle();
     expect(api.main, 2);
+    await tester.tap(find.text('Управление списками'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Новый список'));
     await tester.tap(find.text('Новый список'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Сохранить'));
@@ -109,7 +112,7 @@ void main() {
       await tester.tap(find.text('Покупки').last);
       await tester.pumpAndSettle();
       expect(find.text('Продукты'), findsWidgets);
-      await tester.tap(find.text('Куплено'));
+      await tester.tap(find.byTooltip('Куплено: Молоко'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Вернуть через, дней'),

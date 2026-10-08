@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:familyapp/api/api_client.dart';
 import 'package:familyapp/main.dart';
+import 'package:familyapp/screens/calendar_page.dart';
+import 'package:familyapp/utils/dates.dart';
 import 'package:familyapp/models/child.dart';
 import 'package:familyapp/models/chore.dart';
 import 'package:familyapp/models/member.dart';
@@ -11,6 +13,7 @@ import 'package:familyapp/models/restriction.dart';
 import 'package:familyapp/models/restriction_type.dart';
 import 'package:familyapp/state/auth_store.dart';
 import 'package:familyapp/state/family_store.dart';
+import 'package:familyapp/services/background_reminder_sync.dart';
 
 void main() {
   Future<void> pumpApp(
@@ -23,6 +26,7 @@ void main() {
       ProviderScope(
         overrides: [
           apiClientProvider.overrideWithValue(api),
+          backgroundReminderSyncProvider.overrideWithValue(NoBackgroundSync()),
           tokenStorageProvider.overrideWithValue(
             MemoryTokenStorage(savedToken),
           ),
@@ -97,6 +101,9 @@ void main() {
             apiClientProvider.overrideWithValue(
               FakeApiClient(withFamily: false),
             ),
+            backgroundReminderSyncProvider.overrideWithValue(
+              NoBackgroundSync(),
+            ),
             tokenStorageProvider.overrideWithValue(
               MemoryTokenStorage('saved-token'),
             ),
@@ -119,6 +126,108 @@ void main() {
     }
   });
 
+  testWidgets(
+    'daily shell keeps navigation usable across widths and large text',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+      for (final size in [
+        const Size(375, 667),
+        const Size(667, 375),
+        const Size(1440, 900),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              apiClientProvider.overrideWithValue(FakeApiClient()),
+              backgroundReminderSyncProvider.overrideWithValue(
+                NoBackgroundSync(),
+              ),
+              tokenStorageProvider.overrideWithValue(
+                MemoryTokenStorage('saved-token'),
+              ),
+            ],
+            child: MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: const TextScaler.linear(2),
+                  disableAnimations: true,
+                ),
+                child: child!,
+              ),
+              home: const AuthGate(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Дела'), findsOneWidget);
+        await tester.tap(find.text('Дела').last);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('Покупки').last);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+  );
+
+  testWidgets(
+    'daily progress counts answered checks and confirmed duties, excluding drafts',
+    (tester) async {
+      await pumpApp(tester, api: DailyApiClient(), savedToken: 'saved-token');
+      expect(find.text('2 из 4 дел завершено'), findsOneWidget);
+      expect(find.text('Ждут подтверждения'), findsOneWidget);
+      expect(find.text('Рассмотреть'), findsOneWidget);
+      expect(find.text('Снова можно'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'calendar month and selected day survive compact to desktop resize',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(375, 800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await pumpApp(tester, api: FakeApiClient(), savedToken: 'saved-token');
+      await tester.tap(find.text('Календарь').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Следующий месяц'));
+      await tester.pumpAndSettle();
+      var grid = tester.widget<MonthGrid>(find.byType(MonthGrid));
+      final expectedMonth = grid.month;
+      await tester.tap(
+        find.descendant(of: find.byType(MonthGrid), matching: find.text('15')),
+      );
+      await tester.pumpAndSettle();
+      final expectedDate = DateTime(
+        expectedMonth.year,
+        expectedMonth.month,
+        15,
+      );
+      expect(
+        sameDay(
+          tester.widget<MonthGrid>(find.byType(MonthGrid)).selectedDate,
+          expectedDate,
+        ),
+        isTrue,
+      );
+      for (final size in [const Size(1440, 900), const Size(375, 800)]) {
+        tester.view.physicalSize = size;
+        await tester.pumpAndSettle();
+        grid = tester.widget<MonthGrid>(find.byType(MonthGrid));
+        expect(grid.month, expectedMonth);
+        expect(sameDay(grid.selectedDate, expectedDate), isTrue);
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
   testWidgets('shows login without a saved session', (tester) async {
     await pumpApp(tester, api: FakeApiClient());
 
@@ -126,7 +235,7 @@ void main() {
     expect(find.text('Войти'), findsOneWidget);
   });
 
-  testWidgets('logs in and shows calendar-first navigation', (tester) async {
+  testWidgets('logs in and shows today-first navigation', (tester) async {
     await pumpApp(tester, api: FakeApiClient());
 
     await tester.enterText(find.byType(TextField).at(0), 'mama');
@@ -135,9 +244,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Календарь'), findsWidgets);
-    expect(find.text('Ограничения'), findsOneWidget);
-    expect(find.text('Настройки'), findsOneWidget);
-    expect(find.textContaining('Сегодня: 0 ограничений'), findsOneWidget);
+    expect(find.text('Сегодня'), findsWidgets);
+    expect(find.text('Дела'), findsOneWidget);
+    expect(find.text('Семья'), findsOneWidget);
+    expect(find.text('Сегодня ограничений нет'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    await tester.tap(find.text('Календарь').last);
+    await tester.pumpAndSettle();
     expect(find.byType(FloatingActionButton), findsOneWidget);
   });
 
@@ -177,6 +290,13 @@ class MemoryTokenStorage extends TokenStorage {
 
   @override
   Future<void> delete() async => _token = null;
+}
+
+class NoBackgroundSync extends BackgroundReminderSync {
+  @override
+  Future<void> configure(int memberId, int familyId) async {}
+  @override
+  Future<void> clear() async {}
 }
 
 class FakeApiClient extends ApiClient {
@@ -233,6 +353,21 @@ class FakeApiClient extends ApiClient {
   Future<Map<String, dynamic>> accountState() async => account;
 
   @override
+  Future<Map<String, dynamic>> duties() async => {
+    'occurrences': [],
+    'duties': [],
+    'statistics': [],
+    'away_periods': [],
+  };
+
+  @override
+  Future<Map<String, dynamic>> shopping() async => {
+    'lists': [],
+    'items': [],
+    'purchases': [],
+  };
+
+  @override
   Future<List<Member>> listMembers() async => [member];
 
   @override
@@ -255,4 +390,43 @@ class FakeApiClient extends ApiClient {
     DateTime start,
     DateTime end,
   ) async => [];
+}
+
+class DailyApiClient extends FakeApiClient {
+  @override
+  Future<Map<String, dynamic>> duties() async => {
+    'occurrences': [
+      for (final status in ['confirmed', 'pending', 'open'])
+        {
+          'id': status.hashCode,
+          'title': 'Дежурство $status',
+          'status': status,
+          'occurrence_date': DateTime.now().toIso8601String().substring(0, 10),
+          'assigned_name': 'Мама',
+          'away': false,
+        },
+    ],
+    'duties': [],
+    'statistics': [],
+    'away_periods': [],
+  };
+  @override
+  Future<List<Chore>> listChores() async => [
+    Chore.fromJson({
+      'id': 10,
+      'title': 'Проверка Нет',
+      'responsible_member_id': 1,
+      'responsible_name': 'Мама',
+      'start_date': '2026-01-01',
+      'interval_days': 1,
+      'weekdays': [],
+      'reminder_time': '18:00',
+      'timezone': 'Europe/Moscow',
+      'active': true,
+      'revision': 1,
+      'due_date': DateTime.now().toIso8601String().substring(0, 10),
+      'due_answer': false,
+      'next_at': null,
+    }),
+  ];
 }

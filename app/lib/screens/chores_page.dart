@@ -41,9 +41,7 @@ class ChoresPage extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Напоминания приходят только ответственному. Открывайте приложение регулярно: расписание пополняется на срок до 60 дней. Изменения с другого телефона применяются после обновления.',
-                        ),
+                        const Text('Личные напоминания о проверках'),
                         const SizedBox(height: 8),
                         TextButton.icon(
                           icon: const Icon(Icons.notifications_active_outlined),
@@ -84,9 +82,7 @@ class ChoresPage extends ConsumerWidget {
               if (!notifications.supported)
                 const Padding(
                   padding: EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    'Напоминания работают в приложении на Android. Здесь можно настроить задачи и ответить на проверки.',
-                  ),
+                  child: Text('Уведомления — в приложении Android'),
                 ),
               if (state.chores.isEmpty && !state.busy)
                 Padding(
@@ -121,9 +117,9 @@ class ChoresPage extends ConsumerWidget {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         const SizedBox(height: 8),
-                        Text('${chore.scheduleLabel} · ${chore.reminderTime}'),
-                        Text('Ответственный: ${chore.responsibleName}'),
-                        Text('Часовой пояс: ${chore.timezone}'),
+                        Text(
+                          '${chore.responsibleName} · ${chore.reminderTime}',
+                        ),
                         const SizedBox(height: 12),
                         if (!chore.active) const Text('Приостановлена'),
                         if (chore.dueDate != null)
@@ -134,10 +130,26 @@ class ChoresPage extends ConsumerWidget {
                                 ? 'Да'
                                 : 'Нет'}',
                           ),
-                        if (chore.nextAt != null)
-                          Text(
-                            'Следующая: ${_dateLabel(chore.nextAt!.substring(0, 10))} в ${chore.reminderTime}',
-                          ),
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('Расписание и детали'),
+                          children: [
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(chore.scheduleLabel),
+                              subtitle: Text(
+                                '${chore.reminderTime} · ${chore.timezone}',
+                              ),
+                            ),
+                            if (chore.nextAt != null)
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  'Следующая: ${_dateLabel(chore.nextAt!.substring(0, 10))}',
+                                ),
+                              ),
+                          ],
+                        ),
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 8,

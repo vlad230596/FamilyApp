@@ -1,8 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:familyapp/api/api_client.dart';
 import 'package:familyapp/state/auth_store.dart';
+import 'package:familyapp/state/chore_store.dart';
 import 'package:familyapp/state/family_store.dart';
 
+final dutiesStoreProvider = NotifierProvider<DutiesStore, HouseholdState>(
+  DutiesStore.new,
+);
 final shoppingStoreProvider = NotifierProvider<ShoppingStore, HouseholdState>(
   ShoppingStore.new,
 );
@@ -51,7 +55,9 @@ abstract class HouseholdStore extends Notifier<HouseholdState> {
       final data = await load(api);
       if (!current()) return false;
       state = HouseholdState(data: data);
-
+      if (mutation && this is DutiesStore) {
+        await ref.read(choreStoreProvider.notifier).refresh();
+      }
       return current();
     } catch (error) {
       if (current()) {
@@ -65,6 +71,11 @@ abstract class HouseholdStore extends Notifier<HouseholdState> {
       return saved && current();
     }
   }
+}
+
+class DutiesStore extends HouseholdStore {
+  @override
+  Future<Map<String, dynamic>> load(ApiClient api) => api.duties();
 }
 
 class ShoppingStore extends HouseholdStore {

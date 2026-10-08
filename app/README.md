@@ -16,7 +16,14 @@ Flutter client for the FamilyApp restriction calendar.
 .\scripts\setup_vscode_flutter_env.ps1 -Run "flutter test"
 ```
 
-The app uses three primary destinations: calendar, full restriction history, and
-settings. The calendar opens on today by default and shows the selected-day
-restriction count. Child names, child icons, and restriction type management
-live in settings.
+The Solar Home interface uses five destinations: Today, Tasks, Calendar,
+Shopping, and Family. Phones use bottom navigation; expanded windows use a
+sidebar. Today summarizes household duties, checks, parent confirmations, and
+restrictions using the signed-in member's existing permissions. The calendar
+and its restriction history remain available separately from the daily summary.
+Family contains account, member, invitation, and restriction type settings.
+
+The theme uses navy, sunflower yellow, and coral from the existing house icon.
+The same brand asset is bundled for Flutter and used by Android launcher icons,
+the web favicon, and PWA icons. See [branding](../docs/branding.md) and the
+[approved design proposal](../docs/design/solar-home.md).

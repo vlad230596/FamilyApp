@@ -32,35 +32,44 @@ class SettingsPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Мой аккаунт', style: Theme.of(context).textTheme.titleLarge),
-        if (me != null)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(child: Icon(childIcon(me.icon))),
-            title: Text(me.name),
-            subtitle: Text('${roleLabel(me.role)} · ${me.login ?? ''}'),
-          ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            if (me != null)
-              OutlinedButton.icon(
-                onPressed: () => showCredentialsDialog(
-                  context,
-                  controller,
-                  me,
-                  isSelf: true,
+        Card(
+          child: ExpansionTile(
+            leading: const Icon(Icons.person_outline),
+            title: const Text('Мой аккаунт'),
+            subtitle: Text(me?.name ?? 'Участник'),
+            children: [
+              if (me != null)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(child: Icon(childIcon(me.icon))),
+                  title: Text(me.name),
+                  subtitle: Text('${roleLabel(me.role)} · ${me.login ?? ''}'),
                 ),
-                icon: const Icon(Icons.password),
-                label: const Text('Сменить пароль'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (me != null)
+                    OutlinedButton.icon(
+                      onPressed: () => showCredentialsDialog(
+                        context,
+                        controller,
+                        me,
+                        isSelf: true,
+                      ),
+                      icon: const Icon(Icons.password),
+                      label: const Text('Сменить пароль'),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        ref.read(authStoreProvider.notifier).logout(),
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Выйти'),
+                  ),
+                ],
               ),
-            OutlinedButton.icon(
-              onPressed: () => ref.read(authStoreProvider.notifier).logout(),
-              icon: const Icon(Icons.logout),
-              label: const Text('Выйти'),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         OutlinedButton.icon(
@@ -100,32 +109,42 @@ class SettingsPage extends ConsumerWidget {
           ),
         if (canManage) ...[
           const SizedBox(height: 24),
-          SettingsHeader(
-            title: 'Типы ограничений',
-            actionLabel: 'Создать',
-            icon: Icons.add,
-            onPressed: () =>
-                showRestrictionTypeDialog(context, state, controller),
-          ),
-          const SizedBox(height: 8),
-          if (state.restrictionTypes.isEmpty)
-            const EmptyInline(message: 'Создайте повторяемые типы с цветами.')
-          else
-            ...state.restrictionTypes.map(
-              (type) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  backgroundColor: colorFromHex(type.color),
-                ),
-                title: Text(type.name),
-                trailing: IconButton(
-                  tooltip: 'В архив',
-                  icon: const Icon(Icons.archive_outlined),
+          Card(
+            child: ExpansionTile(
+              leading: const Icon(Icons.event_outlined),
+              title: const Text('Настройки ограничений'),
+              children: [
+                SettingsHeader(
+                  title: 'Типы ограничений',
+                  actionLabel: 'Создать',
+                  icon: Icons.add,
                   onPressed: () =>
-                      showArchiveTypeDialog(context, controller, type),
+                      showRestrictionTypeDialog(context, state, controller),
                 ),
-              ),
+                const SizedBox(height: 8),
+                if (state.restrictionTypes.isEmpty)
+                  const EmptyInline(
+                    message: 'Создайте повторяемые типы с цветами.',
+                  )
+                else
+                  ...state.restrictionTypes.map(
+                    (type) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundColor: colorFromHex(type.color),
+                      ),
+                      title: Text(type.name),
+                      trailing: IconButton(
+                        tooltip: 'В архив',
+                        icon: const Icon(Icons.archive_outlined),
+                        onPressed: () =>
+                            showArchiveTypeDialog(context, controller, type),
+                      ),
+                    ),
+                  ),
+              ],
             ),
+          ),
         ],
       ],
     );
@@ -152,28 +171,34 @@ class _MemberTile extends StatelessWidget {
     final access = member.hasAccount
         ? 'вход: ${member.login}'
         : 'без входа в приложение';
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(child: Icon(childIcon(member.icon))),
-      title: Text(isSelf ? '${member.name} (вы)' : member.name),
-      subtitle: Text('${roleLabel(member.role)} · $access'),
-      trailing: canManage
-          ? PopupMenuButton<String>(
-              tooltip: 'Действия',
-              onSelected: (action) => switch (action) {
-                'edit' => showMemberDialog(context, controller, member: member),
-                _ => showInvitationDialog(context, api, member: member),
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 'edit', child: Text('Изменить')),
-                if (!member.hasAccount)
-                  const PopupMenuItem(
-                    value: 'invite',
-                    child: Text('Пригласить'),
+    return Card(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(child: Icon(childIcon(member.icon))),
+        title: Text(isSelf ? '${member.name} (вы)' : member.name),
+        subtitle: Text('${roleLabel(member.role)} · $access'),
+        trailing: canManage
+            ? PopupMenuButton<String>(
+                tooltip: 'Действия',
+                onSelected: (action) => switch (action) {
+                  'edit' => showMemberDialog(
+                    context,
+                    controller,
+                    member: member,
                   ),
-              ],
-            )
-          : null,
+                  _ => showInvitationDialog(context, api, member: member),
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Изменить')),
+                  if (!member.hasAccount)
+                    const PopupMenuItem(
+                      value: 'invite',
+                      child: Text('Пригласить'),
+                    ),
+                ],
+              )
+            : null,
+      ),
     );
   }
 }

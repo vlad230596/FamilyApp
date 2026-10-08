@@ -62,7 +62,22 @@ class _CalendarPageState extends State<CalendarPage> {
               icon: const Icon(Icons.chevron_left),
             ),
             Expanded(
-              child: Center(
+              child: TextButton(
+                onPressed: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2100),
+                  );
+                  if (date != null && mounted) {
+                    setState(() {
+                      _selectedDate = date;
+                      _month = DateTime(date.year, date.month);
+                    });
+                    widget.controller.loadCalendarMonth(date);
+                  }
+                },
                 child: Text(
                   monthTitle(_month),
                   style: Theme.of(context).textTheme.titleLarge,
@@ -135,6 +150,60 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 }
 
+class TodayRestrictionsOverview extends StatelessWidget {
+  const TodayRestrictionsOverview({super.key, required this.state});
+  final FamilyState state;
+
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+    initiallyExpanded: true,
+    tilePadding: EdgeInsets.zero,
+    title: const Text('Сегодня у детей'),
+    children: [for (final child in state.children) _childCard(context, child)],
+  );
+
+  Widget _childCard(BuildContext context, Child child) {
+    final items = state.restrictionsForDay(DateTime.now(), childId: child.id);
+    final colors = items.map((item) => item.color).toSet();
+    return Card(
+      color: colors.length == 1
+          ? Color.alphaBlend(
+              colorFromHex(colors.first).withValues(alpha: 0.14),
+              Theme.of(context).colorScheme.surface,
+            )
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(child.name, style: Theme.of(context).textTheme.titleMedium),
+            if (items.isEmpty) const Text('Сегодня ограничений нет'),
+            for (final item in items)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3, right: 8),
+                      child: ColorDot(color: item.color),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${item.typeName} · по ${formatDate(item.endDate)}',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class MonthGrid extends StatelessWidget {
   const MonthGrid({
     required this.month,
@@ -159,6 +228,13 @@ class MonthGrid extends StatelessWidget {
     final cells = leading + days;
     final totalCells = cells + ((7 - cells % 7) % 7);
     final compact = MediaQuery.sizeOf(context).height < 720;
+    final cellHeight =
+        (MediaQuery.textScalerOf(context).scale(
+                      Theme.of(context).textTheme.labelMedium?.fontSize ?? 12,
+                    ) *
+                    1.6 +
+                24)
+            .clamp(48.0, double.infinity);
 
     return Column(
       children: [
@@ -182,7 +258,7 @@ class MonthGrid extends StatelessWidget {
             crossAxisCount: 7,
             mainAxisSpacing: compact ? 2 : 3,
             crossAxisSpacing: 3,
-            mainAxisExtent: compact ? 36 : 44,
+            mainAxisExtent: cellHeight,
           ),
           itemBuilder: (context, index) {
             final dayNumber = index - leading + 1;
@@ -232,6 +308,8 @@ class MonthGrid extends StatelessWidget {
                   children: [
                     Text(
                       '$dayNumber',
+                      maxLines: 1,
+                      softWrap: false,
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         color: textColor,
                         fontWeight: today ? FontWeight.w700 : null,

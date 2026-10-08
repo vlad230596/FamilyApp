@@ -1,11 +1,11 @@
 {
-    "name": "familyapp",
-    "short_name": "familyapp",
+    "name": "FamilyApp",
+    "short_name": "FamilyApp",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F6C445",
+    "theme_color": "#F6C445",
+    "description": "Семейные дела, покупки и правила — в одном месте.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

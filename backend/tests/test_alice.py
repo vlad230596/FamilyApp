@@ -80,6 +80,13 @@ def restriction(client, name="Михаил", start="2026-10-07", end="2026-10-08
 
 
 def fixed_day(monkeypatch, day="2026-10-07"):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return cls.fromisoformat(day)
+
+    monkeypatch.setattr("familyapp.domain.date", FixedDate)
+    monkeypatch.setattr("familyapp.persistence.date", FixedDate)
     monkeypatch.setattr("familyapp.alice_voice.local_today", lambda meta: date.fromisoformat(day))
 
 
@@ -205,7 +212,7 @@ def test_summary_filtering_and_read_only(alice_client, monkeypatch):
     fixed_day(monkeypatch)
     restriction(alice_client)
     canceled = restriction(alice_client, label="Телефон")
-    alice_client.post(f"/api/restrictions/{canceled['id']}/cancel", json={})
+    assert alice_client.post(f"/api/restrictions/{canceled['id']}/cancel", json={}).status_code == 200
     restriction(alice_client, name="Мария", start="2026-10-09", end="2026-10-10")
     tokens = linked_token(alice_client)
     result = voice(alice_client, tokens["access_token"])

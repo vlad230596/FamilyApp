@@ -41,8 +41,7 @@ from .persistence import (
     list_today_restrictions,
 )
 from .chores import list_chores, save_chore, answer_chore, answer_history, reminders
-
-from . import shopping
+from . import duties, shopping
 
 api = Blueprint("api", __name__)
 
@@ -135,7 +134,60 @@ def chores_history(chore_id):
 
 @api.get("/api/chores/reminders")
 def chores_reminders():
-    return jsonify(reminders=reminders())
+    from datetime import datetime
+    combined = reminders() + duties.reminders()
+    return jsonify(reminders=sorted(combined, key=lambda item: datetime.fromisoformat(item["scheduled_at"]))[:200])
+
+
+@api.get("/api/duties")
+def duties_list():
+    return jsonify(duties.list_duties())
+
+
+@api.post("/api/duties")
+@parent_required
+def duties_create():
+    return jsonify(duty=duties.save_duty(request_payload())), 201
+
+
+@api.post("/api/duties/<int:duty_id>")
+@parent_required
+def duties_update(duty_id):
+    return jsonify(duty=duties.save_duty(request_payload(), duty_id))
+
+
+@api.post("/api/duties/occurrences/<int:occurrence_id>/complete")
+def duty_complete(occurrence_id):
+    return jsonify(occurrence=duties.complete(occurrence_id, request_payload()))
+
+
+@api.post("/api/duties/occurrences/<int:occurrence_id>/review")
+@parent_required
+def duty_review(occurrence_id):
+    return jsonify(occurrence=duties.review(occurrence_id, request_payload()))
+
+
+@api.get("/api/duties/occurrences/<int:occurrence_id>/history")
+def duty_history(occurrence_id):
+    duties.occurrence(occurrence_id)
+    from .persistence import get_db
+    import json
+    return jsonify(events=[dict(row, snapshot=json.loads(row["snapshot"])) for row in get_db().execute(
+        """SELECT e.*, m.name AS actor_name FROM duty_events e JOIN members m ON m.id = e.actor_member_id
+        WHERE e.occurrence_id = ? ORDER BY e.id""", (occurrence_id,))])
+
+
+@api.post("/api/away-periods")
+@parent_required
+def away_create():
+    return jsonify(period=duties.save_away(request_payload())), 201
+
+
+@api.post("/api/away-periods/<int:period_id>/cancel")
+@parent_required
+def away_cancel(period_id):
+    duties.cancel_away(period_id)
+    return jsonify(ok=True)
 
 
 @api.get("/api/shopping")

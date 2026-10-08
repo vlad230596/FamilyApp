@@ -4,6 +4,7 @@ import 'package:familyapp/api/api_client.dart';
 import 'package:familyapp/models/member.dart';
 import 'package:familyapp/state/family_store.dart';
 import 'package:familyapp/services/chore_notifications.dart';
+import 'package:familyapp/services/background_reminder_sync.dart';
 
 /// Persists the session token between app launches.
 class TokenStorage {
@@ -200,6 +201,11 @@ class AuthStore extends Notifier<AuthState> {
   }
 
   Future<void> _clearReminders() async {
+    try {
+      await ref.read(backgroundReminderSyncProvider).clear();
+    } catch (_) {
+      // Notification cancellation is still needed if native work is unavailable.
+    }
     try {
       await ref.read(choreNotificationsProvider).clear();
     } catch (_) {

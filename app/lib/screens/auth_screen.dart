@@ -62,10 +62,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(
-                      Icons.family_restroom,
-                      size: 56,
-                      color: theme.colorScheme.primary,
+                    Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Image.asset(
+                          'assets/branding/familyapp-icon-1024.png',
+                          width: 80,
+                          height: 80,
+                          semanticLabel: 'FamilyApp',
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(

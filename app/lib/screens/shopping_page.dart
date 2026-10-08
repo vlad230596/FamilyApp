@@ -104,40 +104,43 @@ class _ShoppingPageState extends ConsumerState<ShoppingPage> {
                 if (selected?['is_main'] == 1)
                   const Padding(
                     padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Алиса читает и добавляет покупки в этот список.',
-                    ),
+                    child: Text('Главный семейный список'),
                   ),
                 if (parent)
-                  Wrap(
-                    spacing: 8,
+                  ExpansionTile(
+                    title: const Text('Управление списками'),
                     children: [
-                      TextButton.icon(
-                        onPressed: state.busy ? null : () => _editList(),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Новый список'),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          TextButton.icon(
+                            onPressed: state.busy ? null : () => _editList(),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Новый список'),
+                          ),
+                          TextButton(
+                            onPressed: state.busy || selected == null
+                                ? null
+                                : () => _editList(list: selected),
+                            child: const Text('Переименовать'),
+                          ),
+                          if (selected != null && selected['is_main'] != 1)
+                            TextButton.icon(
+                              onPressed: state.busy
+                                  ? null
+                                  : () => store.run(
+                                      (api) => api.saveShoppingList(
+                                        selected['name'] as String,
+                                        id: selected['id'] as int,
+                                        main: true,
+                                      ),
+                                      mutation: true,
+                                    ),
+                              icon: const Icon(Icons.star_outline),
+                              label: const Text('Сделать главным'),
+                            ),
+                        ],
                       ),
-                      TextButton(
-                        onPressed: state.busy || selected == null
-                            ? null
-                            : () => _editList(list: selected),
-                        child: const Text('Переименовать'),
-                      ),
-                      if (selected != null && selected['is_main'] != 1)
-                        TextButton.icon(
-                          onPressed: state.busy
-                              ? null
-                              : () => store.run(
-                                  (api) => api.saveShoppingList(
-                                    selected['name'] as String,
-                                    id: selected['id'] as int,
-                                    main: true,
-                                  ),
-                                  mutation: true,
-                                ),
-                          icon: const Icon(Icons.star_outline),
-                          label: const Text('Сделать главным'),
-                        ),
                     ],
                   ),
                 const SizedBox(height: 16),
@@ -210,41 +213,50 @@ class _ShoppingPageState extends ConsumerState<ShoppingPage> {
                                     item['category'] == category,
                               ))
                         Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item['name'] as String,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                if (item['category'] != '')
-                                  Text(item['category'] as String),
-                                TextButton.icon(
-                                  onPressed: state.busy
-                                      ? null
-                                      : () => showHouseholdAction(
-                                          context,
-                                          HouseholdAction.buy,
-                                          item: item,
-                                        ),
-                                  icon: const Icon(Icons.shopping_bag_outlined),
-                                  label: const Text('Куплено'),
-                                ),
-                              ],
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
                             ),
+                            leading: IconButton(
+                              tooltip: 'Куплено: ${item['name']}',
+                              icon: const Icon(Icons.check_box_outline_blank),
+                              onPressed: state.busy
+                                  ? null
+                                  : () => showHouseholdAction(
+                                      context,
+                                      HouseholdAction.buy,
+                                      item: item,
+                                    ),
+                            ),
+                            title: Text(
+                              item['name'] as String,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            subtitle: item['category'] == ''
+                                ? null
+                                : Text(item['category'] as String),
+                            onTap: state.busy
+                                ? null
+                                : () => showHouseholdAction(
+                                    context,
+                                    HouseholdAction.buy,
+                                    item: item,
+                                  ),
                           ),
                         ),
                     ],
                   ],
-                const Padding(
-                  padding: EdgeInsets.only(top: 16),
-                  child: Text(
-                    '«Когда-нибудь» переходит в «На этой неделе» через 30 дней. Автоматически срочными покупки не становятся.',
-                  ),
+                const ExpansionTile(
+                  title: Text('Как работает срочность'),
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        '«Когда-нибудь» переходит в «На этой неделе» через 30 дней. Автоматически срочными покупки не становятся.',
+                      ),
+                    ),
+                  ],
                 ),
               ] else ...[
                 if (state.rows('purchases').isEmpty && !state.busy)

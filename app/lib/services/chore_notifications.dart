@@ -72,11 +72,25 @@ class ChoreNotifications {
   Future<void> synchronize(
     List<Map<String, dynamic>> reminders, {
     Set<String> retained = const {},
+  }) => _synchronize(reminders, retained: retained);
+
+  Future<void> synchronizeGuarded(
+    List<Map<String, dynamic>> reminders, {
+    required Future<bool> Function() current,
+    Set<String> retained = const {},
+  }) => _synchronize(reminders, retained: retained, current: current);
+
+  Future<void> _synchronize(
+    List<Map<String, dynamic>> reminders, {
+    Set<String> retained = const {},
+    Future<bool> Function()? current,
   }) => _enqueue(() async {
     await initialize();
     if (!supported) return;
+    if (current != null && !await current()) return;
     await _plugin.cancelAllPendingNotifications();
     for (final active in await _plugin.getActiveNotifications()) {
+      if (current != null && !await current()) return;
       if (!retained.contains(active.tag)) {
         await _plugin.cancel(id: active.id!, tag: active.tag);
       }
@@ -88,6 +102,7 @@ class ChoreNotifications {
     if (await android.areNotificationsEnabled() != true) return;
     final exact = await android.canScheduleExactNotifications() ?? false;
     for (final reminder in reminders) {
+      if (current != null && !await current()) return;
       final when = tz.TZDateTime.from(
         DateTime.parse(reminder['scheduled_at'] as String),
         tz.getLocation(reminder['timezone'] as String),
@@ -96,7 +111,9 @@ class ChoreNotifications {
       await _plugin.zonedSchedule(
         id: notificationId(notificationTag(reminder)),
         title: reminder['title'] as String,
-        body: 'Пора проверить. Выберите «Да» или «Нет».',
+        body: reminder['kind'] == 'duty'
+            ? 'Пора выполнить дежурство. Откройте приложение.'
+            : 'Пора проверить. Выберите «Да» или «Нет».',
         scheduledDate: when,
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
@@ -107,20 +124,29 @@ class ChoreNotifications {
             priority: Priority.high,
             visibility: NotificationVisibility.private,
             tag: notificationTag(reminder),
-            actions: const [
-              AndroidNotificationAction(
-                'yes',
-                'Да',
-                showsUserInterface: true,
-                cancelNotification: false,
-              ),
-              AndroidNotificationAction(
-                'no',
-                'Нет',
-                showsUserInterface: true,
-                cancelNotification: false,
-              ),
-            ],
+            actions: reminder['kind'] == 'duty'
+                ? const [
+                    AndroidNotificationAction(
+                      'open',
+                      'Открыть',
+                      showsUserInterface: true,
+                      cancelNotification: false,
+                    ),
+                  ]
+                : const [
+                    AndroidNotificationAction(
+                      'yes',
+                      'Да',
+                      showsUserInterface: true,
+                      cancelNotification: false,
+                    ),
+                    AndroidNotificationAction(
+                      'no',
+                      'Нет',
+                      showsUserInterface: true,
+                      cancelNotification: false,
+                    ),
+                  ],
           ),
         ),
         androidScheduleMode: exact
@@ -128,6 +154,13 @@ class ChoreNotifications {
             : AndroidScheduleMode.inexactAllowWhileIdle,
         payload: jsonEncode(reminder),
       );
+      if (current != null && !await current()) {
+        await _plugin.cancel(
+          id: notificationId(notificationTag(reminder)),
+          tag: notificationTag(reminder),
+        );
+        return;
+      }
     }
   });
 
@@ -135,6 +168,12 @@ class ChoreNotifications {
     await initialize();
     if (supported) await _plugin.cancelAll();
   });
+
+  Future<void> clearIfCurrent(Future<bool> Function() current) =>
+      _enqueue(() async {
+        await initialize();
+        if (supported && await current()) await _plugin.cancelAll();
+      });
 
   Future<void> _enqueue(Future<void> Function() action) {
     final next = _queue.then((_) => action());
@@ -144,7 +183,7 @@ class ChoreNotifications {
 }
 
 String notificationTag(Map<String, dynamic> data) =>
-    '${data['chore_id']}|${data['occurrence_date']}|${data['revision']}|${data['member_id']}';
+    '${data['kind'] == 'duty' ? 'duty|' : ''}${data['chore_id']}|${data['occurrence_date']}|${data['revision']}|${data['member_id']}';
 
 int notificationId(String tag) {
   var hash = 2166136261;

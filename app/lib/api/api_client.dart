@@ -84,7 +84,36 @@ class ApiClient {
         .toList();
   }
 
+  Future<Map<String, dynamic>> duties() => _get('/api/duties');
   Future<Map<String, dynamic>> shopping() => _get('/api/shopping');
+  Future<void> saveDuty(Map<String, dynamic> data, {int? id}) async {
+    await _post(id == null ? '/api/duties' : '/api/duties/$id', data);
+  }
+
+  Future<void> completeDuty(int id, Map<String, dynamic> data) async {
+    await _post('/api/duties/occurrences/$id/complete', data);
+  }
+
+  Future<void> reviewDuty(int id, bool approved, String rating) async {
+    await _post('/api/duties/occurrences/$id/review', {
+      'approved': approved,
+      'rating': rating,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> dutyHistory(int id) async {
+    final data = await _get('/api/duties/occurrences/$id/history');
+    return (data['events'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> saveAway(String start, String end) async {
+    await _post('/api/away-periods', {'start_date': start, 'end_date': end});
+  }
+
+  Future<void> cancelAway(int id) async {
+    await _post('/api/away-periods/$id/cancel', {});
+  }
+
   Future<Map<String, dynamic>> shoppingList(int id) =>
       _get('/api/shopping?list_id=$id');
 
@@ -325,6 +354,28 @@ class ApiClient {
 }
 
 const _errorTranslations = {
+  'duty not found': 'Дежурство не найдено в этой семье.',
+  'duty occurrence not found': 'Дежурство за этот день не найдено.',
+  'duty access denied': 'Это дежурство назначено другому участнику.',
+  'duty title must be 1-200 characters': 'Название: от 1 до 200 символов.',
+  'select duty weekdays': 'Выберите дни недели.',
+  'invalid duty assignments': 'Проверьте назначения по дням недели.',
+  'new duty cannot start in the past':
+      'Новое дежурство можно начать сегодня или позже.',
+  'duty start and timezone cannot change':
+      'Дата начала и часовой пояс закреплены за дежурством.',
+  'duty already submitted':
+      'Выполнение уже отправлено или подтверждено. Обновите список.',
+  'family is away on this day':
+      'В этот день семья отсутствует. Дежурство не учитывается.',
+  'children may only submit their own duty':
+      'Можно отметить только своё выполнение.',
+  'performer is required': 'Выберите исполнителя.',
+  'invalid duty rating': 'Выберите оценку выполнения.',
+  'duty is not awaiting confirmation':
+      'Это выполнение уже рассмотрено. Обновите список.',
+  'away end precedes start': 'Конец отсутствия не может быть раньше начала.',
+  'away period not found': 'Период уже отменён или не найден.',
   'shopping name must be 1-200 characters':
       'Название покупки: от 1 до 200 символов.',
   'invalid shopping urgency': 'Выберите срочность.',
@@ -338,7 +389,6 @@ const _errorTranslations = {
   'shopping item not found':
       'Покупка уже отмечена или не найдена. Обновите список.',
   'purchase not found': 'Запись о покупке не найдена.',
-
   'only responsible member may answer': 'Ответить может только ответственный.',
   'chore access denied': 'Эта задача назначена другому участнику.',
   'chore not found': 'Задача не найдена в этой семье.',

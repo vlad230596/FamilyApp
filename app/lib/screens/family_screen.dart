@@ -54,7 +54,15 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
                   const SizedBox(height: 16),
                   for (final family in families)
                     ListTile(
-                      leading: const Icon(Icons.family_restroom),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.asset(
+                          'assets/branding/familyapp-icon-1024.png',
+                          width: 40,
+                          height: 40,
+                          semanticLabel: 'FamilyApp',
+                        ),
+                      ),
                       title: Text(family['name'] as String),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: auth.busy

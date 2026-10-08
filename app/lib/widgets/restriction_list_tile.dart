@@ -8,6 +8,7 @@ import 'package:familyapp/utils/child_icons.dart';
 import 'package:familyapp/utils/dates.dart';
 import 'package:familyapp/widgets/color_dot.dart';
 import 'package:familyapp/widgets/status_chip.dart';
+import 'package:familyapp/theme/solar_theme.dart';
 
 class RestrictionListTile extends ConsumerWidget {
   const RestrictionListTile({
@@ -46,31 +47,56 @@ class RestrictionListTile extends ConsumerWidget {
             ),
             const SizedBox(height: 6),
             Text(restriction.childName),
-            if (restriction.reason.isNotEmpty) Text(restriction.reason),
             Text(
               '${formatDate(restriction.startDate)} - ${formatDate(restriction.endDate)}',
             ),
-            if (active && canManage) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        showExtendDialog(context, controller, restriction),
-                    icon: const Icon(Icons.update),
-                    label: const Text('Продлить'),
-                  ),
-                  FilledButton.tonalIcon(
-                    onPressed: () =>
-                        showCancelDialog(context, controller, restriction),
-                    icon: const Icon(Icons.cancel_outlined),
-                    label: const Text('Отменить'),
-                  ),
-                ],
+            const SizedBox(height: 12),
+            Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: active ? SolarColors.coral : SolarColors.border,
+                borderRadius: BorderRadius.circular(8),
               ),
-            ],
+            ),
+            const SizedBox(height: 8),
+            if (active)
+              Text(
+                'Снова можно ${formatDate(restriction.endDate.add(const Duration(days: 1)))}',
+                style: const TextStyle(
+                  color: SolarColors.coralText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Подробнее'),
+              children: [
+                if (restriction.reason.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(restriction.reason),
+                  ),
+                if (active && canManage)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            showExtendDialog(context, controller, restriction),
+                        icon: const Icon(Icons.update),
+                        label: const Text('Продлить'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: () =>
+                            showCancelDialog(context, controller, restriction),
+                        icon: const Icon(Icons.cancel_outlined),
+                        label: const Text('Отменить'),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ],
         ),
       ),

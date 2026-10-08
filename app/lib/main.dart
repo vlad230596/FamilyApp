@@ -5,6 +5,7 @@ import 'package:familyapp/screens/auth_screen.dart';
 import 'package:familyapp/screens/family_screen.dart';
 import 'package:familyapp/screens/home_screen.dart';
 import 'package:familyapp/state/auth_store.dart';
+import 'package:familyapp/theme/solar_theme.dart';
 
 void main() {
   runApp(const ProviderScope(child: FamilyApp()));
@@ -21,10 +22,7 @@ class FamilyApp extends StatelessWidget {
       locale: const Locale('ru'),
       supportedLocales: const [Locale('ru')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2F6B4F)),
-        useMaterial3: true,
-      ),
+      theme: solarTheme(),
       home: const AuthGate(),
     );
   }

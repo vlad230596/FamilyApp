@@ -3,6 +3,7 @@ import 'package:familyapp/models/chore.dart';
 import 'package:familyapp/services/chore_notifications.dart';
 import 'package:familyapp/state/auth_store.dart';
 import 'package:familyapp/state/family_store.dart';
+import 'package:familyapp/services/background_reminder_sync.dart';
 
 final choreStoreProvider = NotifierProvider<ChoreStore, ChoreState>(
   ChoreStore.new,
@@ -66,6 +67,14 @@ class ChoreStore extends Notifier<ChoreState> {
       if (!current()) return false;
       String? reminderError;
       try {
+        final familyId =
+            ref.read(authStoreProvider).account?['family_id'] as int?;
+        if (familyId != null) {
+          await ref
+              .read(backgroundReminderSyncProvider)
+              .configure(memberId, familyId);
+          if (!current()) return false;
+        }
         final reminders = await api.choreReminders();
         if (!current()) return false;
         await ref

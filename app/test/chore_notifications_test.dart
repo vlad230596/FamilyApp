@@ -57,6 +57,36 @@ void main() {
     'title': 'Посудомойка запущена?',
   };
 
+  test('duty reminders open the app and do not offer check answers', () async {
+    await ChoreNotifications().synchronize([
+      {...reminder(), 'kind': 'duty'},
+    ]);
+    final args =
+        calls.singleWhere((call) => call.method == 'zonedSchedule').arguments
+            as Map;
+    final specifics = args['platformSpecifics'] as Map;
+    final actions = specifics['actions'] as List;
+    expect(actions.length, 1);
+    expect((actions.single as Map)['id'], 'open');
+    expect(
+      notificationTag({...reminder(), 'kind': 'duty'}),
+      isNot(notificationTag(reminder())),
+    );
+  });
+
+  test(
+    'revocation during scheduling cancels the just-created stale alert',
+    () async {
+      var checks = 0;
+      await ChoreNotifications().synchronizeGuarded([
+        reminder(),
+        {...reminder(), 'chore_id': 8},
+      ], current: () async => ++checks < 3);
+      expect(calls.where((call) => call.method == 'zonedSchedule').length, 1);
+      expect(calls.last.method, 'cancel');
+    },
+  );
+
   test(
     'schedules private Android reminders with authenticated Yes/No actions',
     () async {

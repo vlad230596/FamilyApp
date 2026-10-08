@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:familyapp/screens/chores_page.dart';
+import 'package:familyapp/screens/duties_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:familyapp/main.dart';
@@ -8,8 +11,10 @@ import 'package:familyapp/services/chore_notifications.dart';
 import 'package:familyapp/state/auth_store.dart';
 import 'package:familyapp/state/chore_store.dart';
 import 'package:familyapp/state/family_store.dart';
+import 'package:familyapp/services/background_reminder_sync.dart';
 
-import 'widget_test.dart' show FakeApiClient, MemoryTokenStorage, fakeMember;
+import 'widget_test.dart'
+    show FakeApiClient, MemoryTokenStorage, fakeMember, NoBackgroundSync;
 
 void main() {
   Future<void> openTasks(
@@ -27,6 +32,7 @@ void main() {
       ProviderScope(
         overrides: [
           apiClientProvider.overrideWithValue(api),
+          backgroundReminderSyncProvider.overrideWithValue(NoBackgroundSync()),
           tokenStorageProvider.overrideWithValue(MemoryTokenStorage('token')),
           if (notifications != null)
             choreNotificationsProvider.overrideWithValue(notifications),
@@ -35,9 +41,42 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Задачи'));
+    await tester.tap(find.text('Дела'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Проверки'));
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'notifications open matching task subtab without submitting on tap',
+    (tester) async {
+      final api = ChoreApi();
+      final notifications = RecordingNotifications();
+      await openTasks(tester, api, notifications: notifications);
+      await tester.tap(find.text('Дежурства'));
+      await tester.pumpAndSettle();
+      notifications.onResponse!(
+        NotificationResponse(
+          notificationResponseType:
+              NotificationResponseType.selectedNotification,
+          payload: '{}',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ChoresPage), findsOneWidget);
+      expect(api.answered, isNull);
+      notifications.onResponse!(
+        NotificationResponse(
+          notificationResponseType:
+              NotificationResponseType.selectedNotification,
+          payload: '{"kind":"duty"}',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(DutiesPage), findsOneWidget);
+      expect(api.answered, isNull);
+    },
+  );
 
   testWidgets('assignee answers No and it remains distinct from no answer', (
     tester,
@@ -107,7 +146,13 @@ void main() {
     await tester.tap(find.text('История'));
     await tester.pumpAndSettle();
     expect(find.text('07.10.2026 — Нет'), findsOneWidget);
-    expect(find.textContaining('Мама ·'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.textContaining('Мама ·'),
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -165,6 +210,8 @@ void main() {
 }
 
 class RecordingNotifications extends ChoreNotifications {
+  @override
+  Future<void> initialize() async {}
   int synced = 0;
   int cleared = 0;
   Completer<void>? clearGate;

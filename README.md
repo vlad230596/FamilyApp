@@ -21,6 +21,23 @@ See [Iteration 1 Plan](docs/iteration-1-plan.md),
 See [Deployment](DEPLOYMENT.md) for GitHub Releases, the shared VDS ingress,
 and interactive setup of the initial parent accounts.
 
+## Solar Home interface (0.6.0)
+
+The redesigned Russian interface uses the house icon's navy, sunflower, and
+coral palette. Today is the opening screen, followed by Tasks, Calendar,
+Shopping, and Family. Navigation sits at the bottom on phones and in a sidebar
+on expanded windows. Details and management controls open progressively.
+
+Today summarizes server-authorized duties, checks, parent confirmations,
+restrictions, and shopping. Duties include weekday assignments, parent review,
+ratings, away periods, and participation balances; Yes/No checks retain their
+existing independent completion rules. Android periodically refreshes reminder
+schedules in the background, while signed APKs continue using the existing
+production API and signing identity.
+
+See the [approved design](docs/design/solar-home.md) and
+[brand assets](docs/branding.md).
+
 See [Alice integration](docs/alice.md) for the read-only voice webhook, family
 account linking, server configuration, and Yandex Dialogs console settings.
 
