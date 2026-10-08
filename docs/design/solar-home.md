@@ -103,7 +103,7 @@ closing a modal, landscape, and reduced motion. Larger body text was also
 checked for document overflow; this is not a complete accessibility audit or
 Flutter text-scaling test. Desktop and phone screenshots accompany the HTML.
 
-Flutter validation: all 42 tests pass; the analyzer reports no issues; the web
+Flutter validation: all 45 release tests pass; the analyzer reports no issues; the web
 release build succeeds. Widget coverage includes narrow portrait, landscape,
 expanded desktop, 2x text, reduced motion, check/duty progress, notification
 destinations, and preserving the selected calendar month/day across resizing.

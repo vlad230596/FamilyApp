@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:familyapp/main.dart';
 import 'package:familyapp/models/member.dart';
+import 'package:familyapp/services/background_reminder_sync.dart';
 import 'package:familyapp/state/auth_store.dart';
 import 'package:familyapp/state/family_store.dart';
-import 'widget_test.dart' show FakeApiClient, MemoryTokenStorage;
+import 'widget_test.dart' show FakeApiClient, MemoryTokenStorage, NoBackgroundSync;
 
 void main() {
   Future<void> open(
@@ -26,6 +27,7 @@ void main() {
         overrides: [
           apiClientProvider.overrideWithValue(api),
           tokenStorageProvider.overrideWithValue(MemoryTokenStorage('token')),
+          backgroundReminderSyncProvider.overrideWithValue(NoBackgroundSync()),
         ],
         child: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(scale)),

@@ -21,7 +21,7 @@ See [Iteration 1 Plan](docs/iteration-1-plan.md),
 See [Deployment](DEPLOYMENT.md) for GitHub Releases, the shared VDS ingress,
 and interactive setup of the initial parent accounts.
 
-## Solar Home interface (0.6.0)
+## Solar Home interface (0.6.1)
 
 The redesigned Russian interface uses the house icon's navy, sunflower, and
 coral palette. Today is the opening screen, followed by Tasks, Calendar,
