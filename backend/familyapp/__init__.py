@@ -59,6 +59,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         init_db()
         from .chores import init_chores
         init_chores()
+        from .shopping import init_shopping
+        init_shopping()
         from .alice_oauth import init_alice
         init_alice()
 

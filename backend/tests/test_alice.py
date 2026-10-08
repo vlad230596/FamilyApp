@@ -25,11 +25,11 @@ def csrf(response):
     return re.search(r'name="csrf" value="([^"]+)"', response.get_data(as_text=True))[1]
 
 
-def get_code(client, family_id=None):
+def get_code(client, family_id=None, scope="restrictions:read"):
     browser = client.application.test_client()
     response = browser.get("/integrations/alice/authorize", query_string={
         "client_id": "familyapp-alice", "redirect_uri": REDIRECT, "response_type": "code",
-        "scope": "restrictions:read", "state": "opaque state & русский"})
+        "scope": scope, "state": "opaque state & русский"})
     assert response.status_code == 200
     response = browser.post("/integrations/alice/authorize", data={
         "csrf": csrf(response), "login": PARENT_LOGIN, "password": PARENT_PASSWORD})

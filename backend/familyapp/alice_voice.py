@@ -10,7 +10,7 @@ from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from .persistence import list_children, list_restrictions
 
-HELP = "Можно спросить: какие сегодня ограничения у ребят, что нельзя Мише или когда ему снова можно мультики."
+HELP = "Можно спросить: что нужно купить, какие сегодня ограничения у ребят, или сказать: добавь в список покупок молоко."
 NAME_GROUPS = (
     ("михаил", "миша", "мишенька"), ("мария", "маша", "машенька"),
     ("александр", "саша", "саня"), ("александра", "саша"),
@@ -151,6 +151,10 @@ def answer(payload):
         text = "какие сегодня ограничения у ребят"
     if text in {"хватит", "стоп", "выход", "закрой навык", "до свидания"}:
         return spoken_response("До встречи!", end=True)
+    from .alice_shopping import answer_shopping
+    shopping_response = answer_shopping(utterance.get("command", "")[:2048], previous, spoken_response, clean_label)
+    if shopping_response is not None:
+        return shopping_response
     if not text or text in {"помощь", "что ты умеешь", "что ты можешь"}:
         return spoken_response("Это семейный помощник. " + HELP)
     words = set(text.split())
@@ -160,6 +164,9 @@ def answer(payload):
     followup = bool(previous) and (previous.get("pending") or text.startswith("а ") or text in {"повтори", "повторить", "еще раз"})
     if not recognized and not followup:
         return spoken_response("Я пока отвечаю на вопросы об ограничениях. " + HELP)
+    from . import alice_oauth as oauth
+    if not oauth.has_scope(oauth.SCOPE):
+        return spoken_response("Для ограничений переподключите аккаунт и разрешите чтение ограничений.", end=True)
     children = list_children()
     tokens = set(text.split())
     matches = [child for child in children if any(f" {variant} " in f" {text} " for variant in aliases(child["name"]))]

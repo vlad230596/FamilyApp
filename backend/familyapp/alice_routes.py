@@ -89,12 +89,13 @@ def authorize():
             return jsonify(error="invalid_request"), 400
         if args.get("response_type") != "code":
             return jsonify(error="unsupported_response_type"), 400
-        if args.get("scope", oauth.SCOPE) != oauth.SCOPE:
+        scope = oauth.parse_scope(args.get("scope", oauth.SCOPE))
+        if scope is None:
             return jsonify(error="invalid_scope"), 400
         if len(args.get("state", "")) > 1024:
             return jsonify(error="invalid_request"), 400
         flow = {"mode": "authorize", "client_id": args["client_id"],
-                "redirect_uri": args["redirect_uri"], "state": args.get("state", "")}
+                "redirect_uri": args["redirect_uri"], "state": args.get("state", ""), "scope": scope}
         return page(flow)
     flow = read_flow("authorize")
     if request.form.get("action") == "deny":
@@ -146,7 +147,7 @@ def token():
         return response, 401
     if payload.get("grant_type") not in {"authorization_code", "refresh_token"}:
         return jsonify(error="unsupported_grant_type"), 400
-    if "scope" in payload and payload["scope"] != oauth.SCOPE:
+    if "scope" in payload and oauth.parse_scope(payload["scope"]) is None:
         return jsonify(error="invalid_scope"), 400
     result = oauth.exchange_token(payload)
     return (jsonify(result), 200) if result else (jsonify(error="invalid_grant"), 400)

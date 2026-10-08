@@ -42,6 +42,8 @@ from .persistence import (
 )
 from .chores import list_chores, save_chore, answer_chore, answer_history, reminders
 
+from . import shopping
+
 api = Blueprint("api", __name__)
 
 PUBLIC_ENDPOINTS = {"api.health", "api.auth_register", "api.auth_login"}
@@ -134,6 +136,34 @@ def chores_history(chore_id):
 @api.get("/api/chores/reminders")
 def chores_reminders():
     return jsonify(reminders=reminders())
+
+
+@api.get("/api/shopping")
+def shopping_list():
+    return jsonify(shopping.list_shopping())
+
+
+@api.post("/api/shopping")
+def shopping_add():
+    return jsonify(item=shopping.save_item(request_payload())), 201
+
+
+@api.post("/api/shopping/<int:item_id>/buy")
+def shopping_buy(item_id):
+    shopping.buy_item(item_id, request_payload())
+    return jsonify(ok=True)
+
+
+@api.post("/api/shopping/purchases/<int:purchase_id>/return")
+def shopping_return(purchase_id):
+    shopping.return_purchase(purchase_id)
+    return jsonify(ok=True)
+
+
+@api.post("/api/shopping/purchases/<int:purchase_id>/cancel-return")
+def shopping_cancel_return(purchase_id):
+    shopping.return_purchase(purchase_id, cancel=True)
+    return jsonify(ok=True)
 
 
 @api.get("/health")

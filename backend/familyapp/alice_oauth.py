@@ -1,4 +1,4 @@
-"""A single confidential OAuth client for Alice, with family-scoped read access."""
+"""A single confidential OAuth client for Alice, with family-scoped permissions."""
 from __future__ import annotations
 
 import secrets
@@ -11,6 +11,20 @@ from .accounts import hash_token
 from .persistence import get_db, now_iso
 
 SCOPE = "restrictions:read"
+SHOPPING_READ = "shopping:read"
+SHOPPING_WRITE = "shopping:write"
+SUPPORTED_SCOPES = {SCOPE, SHOPPING_READ, SHOPPING_WRITE}
+
+
+def parse_scope(value):
+    if not isinstance(value, str):
+        return None
+    scopes = set(value.replace("&", " ").split())
+    return "&".join(sorted(scopes)) if scopes and scopes <= SUPPORTED_SCOPES else None
+
+
+def has_scope(scope):
+    return scope in getattr(g, "alice_scope", "").split("&")
 ACCESS_SECONDS = 3600
 REFRESH_SECONDS = 90 * 86400
 
@@ -35,6 +49,8 @@ def init_alice():
             key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, resets_at TEXT NOT NULL
         );
     """)
+    if "scope" not in {row["name"] for row in get_db().execute("PRAGMA table_info(alice_grants)")}:
+        get_db().execute("ALTER TABLE alice_grants ADD COLUMN scope TEXT NOT NULL DEFAULT 'restrictions:read'")
     get_db().commit()
 
 
@@ -93,9 +109,9 @@ def issue_code(flow, family_id):
     db = get_db()
     with db:
         cursor = db.execute(
-            "INSERT INTO alice_grants(user_id, family_id, client_id, credential_hash, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (flow["user_id"], family_id, flow["client_id"], flow["credential_hash"], now_iso()))
+            "INSERT INTO alice_grants(user_id, family_id, client_id, credential_hash, created_at, scope) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (flow["user_id"], family_id, flow["client_id"], flow["credential_hash"], now_iso(), flow.get("scope", SCOPE)))
         db.execute("INSERT INTO alice_codes VALUES (?, ?, ?, ?, NULL)",
                    (hash_token(code), cursor.lastrowid, flow["redirect_uri"], expires(300)))
     return code
@@ -138,12 +154,16 @@ def exchange_token(payload):
             grant_id = row["grant_id"]
             refresh_expiry = row["refresh_expires_at"]
             db.execute("UPDATE alice_tokens SET replaced_at = ? WHERE access_hash = ?", (now_iso(), row["access_hash"]))
+        grant_scope = valid_grant(grant_id)["scope"]
+        if "scope" in payload and parse_scope(payload["scope"]) != grant_scope:
+            db.rollback()
+            return None
         access, refresh = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         db.execute("INSERT INTO alice_tokens VALUES (?, ?, ?, ?, ?, NULL)",
                    (hash_token(access), hash_token(refresh), grant_id, expires(ACCESS_SECONDS), refresh_expiry))
         db.commit()
         return {"access_token": access, "refresh_token": refresh, "token_type": "Bearer",
-                "expires_in": ACCESS_SECONDS, "scope": SCOPE}
+                "expires_in": ACCESS_SECONDS, "scope": grant_scope}
     except Exception:
         db.rollback()
         raise
@@ -158,6 +178,9 @@ def authenticate_alice(token):
     g.family_id = grant["family_id"]
     g.user_id = grant["user_id"]
     g.alice_grant_id = grant["id"]
+    g.alice_scope = grant["scope"]
+    g.alice_member_id = get_db().execute("SELECT id FROM members WHERE user_id = ? AND family_id = ? AND role = 'parent'",
+                                        (grant["user_id"], grant["family_id"])).fetchone()["id"]
     return True
 
 

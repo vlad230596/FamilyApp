@@ -1,7 +1,8 @@
 # Alice integration
 
-The first Alice integration reads restrictions. It never creates, extends or
-cancels them. The Flask backend hosts both the skill webhook and a confidential
+The Alice integration reads restrictions and, with separate permissions, reads
+and adds shopping items. It never creates, extends or cancels restrictions.
+The Flask backend hosts both the skill webhook and a confidential
 OAuth 2.0 authorization-code client. No Yandex Cloud function is required.
 
 ## VDS preparation status (2026-10-07)
@@ -9,11 +10,11 @@ OAuth 2.0 authorization-code client. No Yandex Cloud function is required.
 The server was accessed with the existing FamilyApp administration SSH key,
 using its already trusted IP host entry. At preparation time production was on release `0.2.0`;
 both FamilyApp containers are healthy and `/health` returns `{"status":"ok"}`.
-No release, image replacement, container recreation or Caddy reload was performed.
+No release, image replacement, container recreation or Caddy reload was performed during preparation. Deployment was completed on 2026-10-08; see Verification below.
 
 Created `/opt/familyapp/.alice.env`, owned by root with mode 0600, with client ID
 `familyapp-alice` and independently generated OAuth and cookie-signing secrets.
-The skill ID was configured on 2026-10-08 as `068d075d-322a-4973-bf62-da2ddadee964`.
+The skill ID was initially empty. It is now configured as `068d075d-322a-4973-bf62-da2ddadee964`.
 The client secret alone was downloaded into the ignored local file
 `.tmp/alice-yandex-client-secret.txt`, with access restricted to the current
 Windows user. Its contents must only be pasted into the Yandex account-linking
@@ -22,14 +23,12 @@ secret field; the cookie-signing secret stays on the server.
 Prepared `/opt/familyapp/setup/alice/compose.prod.yaml` and
 `/opt/familyapp/setup/alice/Caddyfile.candidate`, plus timestamped originals and
 an operator note. Compose `config -q` and Caddy `validate` succeeded. Docker
-Compose on the server is 5.0.2. At preparation time these files were staged, not active, and the running
-backend did not yet contain the Alice adapter. Release `0.3.0` supplies it. Before activation, compare the
-candidate against the latest shared Caddy configuration to preserve changes
-made since preparation.
+Compose on the server is 5.0.2. These files were initially staged. The Compose
+configuration is now active; Caddy was updated against its latest shared
+configuration, preserving the other projects.
 
 The owner can create the Yandex skill and fill the fields below now. Live
-account linking and webhook testing require a subsequent authorized deployment
-of the adapter and activation of the staged configurations. The Yandex console's
+account linking can now be tested against the deployed adapter. The Yandex console's
 acceptance of port 8443 is still unverified.
 
 ## Owner console checklist
@@ -72,7 +71,7 @@ Production origin: `https://famly-app.duckdns.org:8443`.
 | Authorization URL | `https://famly-app.duckdns.org:8443/integrations/alice/authorize` |
 | Token URL | `https://famly-app.duckdns.org:8443/integrations/alice/token` |
 | Refresh token URL | Same `/integrations/alice/token` URL |
-| Action group identifier / scope | `restrictions:read` |
+| Action group identifier / scope | `restrictions:read&shopping:read&shopping:write` (shopping-enabled backend required) |
 | Device with a screen required | No |
 
 The only allowed OAuth redirect is exactly
@@ -122,8 +121,8 @@ ingress before testing; otherwise the requests reach Flutter. No changes to the
 VPN or host port 443 are needed in the repository configuration.
 
 Verify that the Yandex console accepts the HTTPS origin with port 8443 and that
-it can reach the webhook. This has not been verified against the live VDS or
-Yandex console. Use a publicly valid fullchain certificate. If Yandex rejects
+it can reach the webhook. Live HTTPS access on the VDS is verified; access from
+the Yandex console remains to be tested. Use a publicly valid fullchain certificate. If Yandex rejects
 the port, decide on ingress changes separately before changing the shared VDS.
 
 Flask does not automatically load the supplied `backend/.env.example`; export
@@ -214,6 +213,39 @@ After account linking the skill reads today's summary; it does not restore the
 exact pre-linking question in this version.
 
 ## Verification
+
+### Shopping voice extension (release 0.4.0)
+
+The shared family shopping list can be read and one item can be added per
+command. Supported examples: "Что нужно купить?", "Прочитай список покупок",
+"Добавь в список покупок молоко", and "Запиши хлеб в список покупок".
+An add command without a name asks for one item and accepts the next reply.
+Completed reads and additions return `end_session: true`. Empty lists have a
+short explicit response; long lists are bounded and refer to the app.
+
+The extension uses the existing shopping domain. Voice additions use default
+urgency and category and do not escalate urgency on duplicates. Audit member
+IDs refer to the parent who linked the family, not the unidentified speaker.
+Purchases, removal, urgency filtering and category filtering are not supported.
+
+After deploying this extension, set the console action group identifier to
+`restrictions:read&shopping:read&shopping:write`, save/publish the updated skill,
+and reconnect the parent account. Each permission is checked separately.
+Existing grants are migrated with `restrictions:read` only; refreshing a token
+cannot upgrade permissions. The consent page explicitly describes reading and
+adding shopping items for everyone who can speak to the device.
+
+### Production deployment, 2026-10-08
+
+Release `0.3.0` is deployed. The Alice environment file is loaded by the backend,
+and Caddy routes `/integrations/alice/*` to it. The configured skill ID is
+`068d075d-322a-4973-bf62-da2ddadee964`.
+
+Live HTTPS checks passed for health, the account management and authorization
+pages, an unlinked webhook requesting account linking, and rejection of a wrong
+skill ID. Backend and web containers report version `0.3.0` and are healthy.
+No private family data was accessed. Real Yandex account linking and speaker
+verification remain to be performed by the project owner.
 
 Run from `backend/`: `poetry run pytest`.
 
