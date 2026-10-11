@@ -294,6 +294,32 @@ def test_timezone_and_bounded_answers(alice_client, monkeypatch):
     result = voice(alice_client, tokens["access_token"])
     assert len(result["response"]["text"]) < 1800
     assert "Остальные ограничения" in result["response"]["text"]
+    assert result["response"]["end_session"] is True
+
+
+@pytest.mark.parametrize("phrase", ["какие ограничения у детей", "какие ограничения у ребят", "какие ограничения у Миши", "можно Мише сегодня мультики", "когда Мише можно мультики"])
+@pytest.mark.parametrize("has_restrictions", [False, True])
+def test_completed_restriction_answers_end_session(alice_client, monkeypatch, phrase, has_restrictions):
+    fixed_day(monkeypatch)
+    if has_restrictions:
+        restriction(alice_client)
+    else:
+        alice_client.post("/api/children", json={"name": "Михаил"})
+    access = linked_token(alice_client)["access_token"]
+    result = voice(alice_client, access, phrase)
+    assert result["response"]["end_session"] is True
+    assert "ограничени" in result["response"]["text"].casefold()
+
+
+def test_restriction_clarification_keeps_session_open(alice_client, monkeypatch):
+    fixed_day(monkeypatch)
+    restriction(alice_client)
+    access = linked_token(alice_client)["access_token"]
+    ask = voice(alice_client, access, "можно сегодня мультики")
+    assert ask["response"]["end_session"] is False
+    answer = voice(alice_client, access, "Миша", state=ask["session_state"])
+    assert answer["response"]["end_session"] is True
+    assert "Михаил" in answer["response"]["text"]
 
 
 def test_empty_help_and_link_complete(alice_client, monkeypatch):

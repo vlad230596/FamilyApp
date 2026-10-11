@@ -6,7 +6,9 @@ import 'package:familyapp/models/member.dart';
 import 'package:familyapp/services/background_reminder_sync.dart';
 import 'package:familyapp/state/auth_store.dart';
 import 'package:familyapp/state/family_store.dart';
-import 'widget_test.dart' show FakeApiClient, MemoryTokenStorage, NoBackgroundSync;
+import 'package:familyapp/state/household_store.dart';
+import 'widget_test.dart'
+    show FakeApiClient, MemoryTokenStorage, NoBackgroundSync;
 
 void main() {
   Future<void> open(
@@ -50,7 +52,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Дача').last);
     await tester.pumpAndSettle();
-    expect(api.selected, 2);
+    expect(
+      tester
+          .widget<DropdownButtonFormField<int>>(
+            find.byType(DropdownButtonFormField<int>),
+          )
+          .initialValue,
+      2,
+    );
     await tester.tap(find.text('Управление списками'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Сделать главным'));
@@ -74,7 +83,7 @@ void main() {
     expect(api.lists.last['name'], 'Поездка');
     expect(tester.takeException(), isNull);
   });
-  testWidgets('shopping form keeps entered data after server error', (
+  testWidgets('shopping keeps the local item queued after network failure', (
     tester,
   ) async {
     final api = HouseholdApi()..failSave = true;
@@ -89,15 +98,15 @@ void main() {
     );
     await tester.tap(find.text('Сохранить'));
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Хлеб'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.text('Нет связи'),
-      ),
-      findsOneWidget,
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(FamilyApp)),
     );
+    final state = container.read(shoppingStoreProvider);
+    expect(state.pending, 1);
+    expect(state.rows('items').single['name'], 'Хлеб');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

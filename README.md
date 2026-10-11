@@ -21,23 +21,6 @@ See [Iteration 1 Plan](docs/iteration-1-plan.md),
 See [Deployment](DEPLOYMENT.md) for GitHub Releases, the shared VDS ingress,
 and interactive setup of the initial parent accounts.
 
-## Solar Home interface (0.6.1)
-
-The redesigned Russian interface uses the house icon's navy, sunflower, and
-coral palette. Today is the opening screen, followed by Tasks, Calendar,
-Shopping, and Family. Navigation sits at the bottom on phones and in a sidebar
-on expanded windows. Details and management controls open progressively.
-
-Today summarizes server-authorized duties, checks, parent confirmations,
-restrictions, and shopping. Duties include weekday assignments, parent review,
-ratings, away periods, and participation balances; Yes/No checks retain their
-existing independent completion rules. Android periodically refreshes reminder
-schedules in the background, while signed APKs continue using the existing
-production API and signing identity.
-
-See the [approved design](docs/design/solar-home.md) and
-[brand assets](docs/branding.md).
-
 See [Alice integration](docs/alice.md) for the read-only voice webhook, family
 account linking, server configuration, and Yandex Dialogs console settings.
 
@@ -74,21 +57,46 @@ cd app
   Legacy members without credentials are never claimed by a public registration.
   If a legacy family has no account, its access must be restored locally by the
   operator; there is no public endpoint to claim it.
-- `Календарь`: primary screen with today's date selected by default, colored
+- `Сегодня`: opening screen with daily duties, checks, confirmed progress,
+  parent review requests, restrictions, and the shopping list shortcut.
+- `Календарь`: today's date selected by default, colored
   markers, selected-day restriction count, details, and an optional child filter.
-- `Ограничения`: full restriction history, including active, expired, and
+- `История` within Calendar: full restriction history, including active, expired, and
   cancelled items.
-- `Задачи`: recurring checks with one responsible member, a start date,
+- `Дела`: recurring checks with one responsible member, a start date,
   an interval of 1-365 calendar days or selected weekdays, a reminder time,
   and an IANA timezone. Parents create, edit, reassign, and pause tasks.
   Only the responsible member can answer Yes or No; both answers finish that
   occurrence. No answer remains distinct from No. History preserves the
   original title, actor, schedule revision, and answer timestamp.
-- `Настройки`: own account (change password, sign out), family members with
+  The Duties subtab adds weekday assignees, child submissions with parent review,
+  ratings, away periods, a debt balance, and compensation suggestions.
+- `Покупки`: shared urgency groups, optional categories, duplicate merging,
+  purchase history, and optional scheduled/manual return of bought items.
+- `Семья`: own account (change password, sign out), family members with
   roles and app access, and reusable restriction type management.
 
 Parents manage everything. Children see only their own restrictions and cannot
 change restrictions, types, or members.
+
+### Login protection
+
+The app login API permits 10 attempts per normalized login and 30 per direct
+client address in a 60-second window, including successful attempts. Counters
+persist in SQLite across workers and restarts. Excess attempts return HTTP 429
+with a Russian message and `Retry-After`; current sessions keep working. Unknown
+accounts still incur a password hash check. Forwarded address headers are not
+trusted, so users behind the deployment proxy may share the address limit.
+Registration has separate persisted limits: 10 attempts per address and 3 per
+normalized login per minute.
+
+### Delivery status
+
+Iterations 1 and 2 and the pre-Alice feature stages of Iteration 3 are implemented.
+The calendar includes a colored today overview per child. Full duties, shopping,
+and Android background reminder sync are available. See Iteration 3 for the exact
+balance rules and manual verification limits. Alice restriction reading
+is present in working tree changes, with live console/speaker verification pending.
 
 ## Regular Task Reminders
 
@@ -102,16 +110,22 @@ change restrictions, types, or members.
 - A sync schedules the next 60 days, capped at the nearest 200 notifications.
   Open the app regularly to replenish the schedule. Sync runs on opening,
   resuming, manual refresh, and every minute while the app is in the foreground.
-  There is no background network sync yet. Reboot restores scheduled alarms.
+  Android WorkManager also requests a network sync every 15 minutes. Android may
+  defer that work under battery restrictions; this is not an exact delivery promise.
+  Network failures preserve the last alarms and request retry. Reboot restores scheduled alarms.
 - Changes on another phone take effect only after this phone syncs. Old alerts
   cannot submit answers after reassignment, pause, or a schedule edit. Signing
   out or choosing another family cancels local reminders.
 - The timezone belongs to the task, so travel does not move its reminder time.
   Android defaults to the device timezone; web defaults to Moscow for UTC+3
-  and UTC otherwise. The timezone is editable in the form.
+  and UTC otherwise. Check timezones are editable; duty timezones are fixed after
+  creation to preserve daily history.
 - Web supports task management and answers, but does not schedule notifications.
 - The list offers the latest due check; older unanswered checks are not rolled
-  into a debt. Ratings, parent confirmation, and fairness statistics are deferred.
+  into a debt. Duties have their own confirmation, rating, and balance workflow.
+- Duty reminders share the 60-day/200-alert budget, respect family away periods,
+  and open the duties screen. Sign-out and family selection cancel background work
+  as well as local reminders. Tokens are not stored in work input or alert payloads.
 
 API: `GET|POST /api/chores`, `POST /api/chores/<id>`,
 `GET|POST /api/chores/<id>/answers`, `GET /api/chores/reminders`.
@@ -121,3 +135,6 @@ Answers include `occurrence_date`, boolean `answer`, and current `revision`.
 Restriction creation supports reusable colored types and one-off custom
 restrictions. The form uses a start date plus duration in days, weeks, or months
 and keeps entered values visible when validation fails.
+
+See [Iteration 3](docs/iteration-3-plan.md) for duty/shopping endpoints, history,
+scheduled edit semantics, and the remaining physical Android verification steps.

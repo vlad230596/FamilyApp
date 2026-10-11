@@ -13,6 +13,36 @@ class ShoppingPage extends ConsumerStatefulWidget {
 
 class _ShoppingPageState extends ConsumerState<ShoppingPage> {
   bool _history = false;
+  String _returnLabel(dynamic days) =>
+      days == null ? 'без автовозврата' : 'через $days дн.';
+
+  Future<void> _discardBlocked(Map<String, dynamic> operation) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Убрать локальное изменение?'),
+        content: const Text(
+          'Это действие не попадёт на сервер. Если убираете добавление товара, его локальная отметка покупки тоже будет убрана.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Убрать'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await ref
+          .read(shoppingStoreProvider.notifier)
+          .discardBlocked(operation['operation_id'] as String);
+    }
+  }
+
   Future<void> _editList({Map<String, dynamic>? list}) async {
     final form = GlobalKey<FormState>();
     var value = list?['name'] as String? ?? '';
@@ -77,6 +107,129 @@ class _ShoppingPageState extends ConsumerState<ShoppingPage> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             children: [
+              if (state.offline || state.syncing || state.pending > 0)
+                Semantics(
+                  liveRegion: true,
+                  child: Card(
+                    color: Theme.of(context).colorScheme.secondaryContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: DefaultTextStyle.merge(
+                        style: TextStyle(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSecondaryContainer,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              state.offline
+                                  ? 'Работаем локально. Нет связи с сервером.'
+                                  : state.syncing
+                                  ? 'Синхронизация…'
+                                  : 'Изменения сохранены на устройстве.',
+                            ),
+                            if (state.offline || state.pending > 0)
+                              const Text(
+                                'Изменения будут объединены при восстановлении связи.',
+                              ),
+                            Text('Не отправлено: ${state.pending}'),
+                            if (state.lastSync != null)
+                              Text(
+                                'Последняя синхронизация: ${formatDate(state.lastSync!)} '
+                                '${state.lastSync!.hour.toString().padLeft(2, '0')}:${state.lastSync!.minute.toString().padLeft(2, '0')}',
+                              ),
+                            TextButton.icon(
+                              onPressed: state.syncing ? null : store.refresh,
+                              icon: const Icon(Icons.sync),
+                              label: const Text('Синхронизировать'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              for (final conflict in state.conflicts)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${conflict['name']}: покупка уже отмечена. Сроки возврата различаются.',
+                        ),
+                        Text(
+                          'На сервере: ${_returnLabel(conflict['return_in_days'])}. '
+                          'Ваш выбор: ${_returnLabel(conflict['requested_days'])}.',
+                        ),
+                        if (conflict['can_change'] != true)
+                          const Text(
+                            'Возврат уже выполнен или отменён. Можно оставить текущее состояние.',
+                          ),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            TextButton(
+                              onPressed: state.busy || state.pending > 0
+                                  ? null
+                                  : () => store.resolve(conflict, false),
+                              child: const Text('Оставить как на сервере'),
+                            ),
+                            if (conflict['can_change'] == true)
+                              TextButton(
+                                onPressed: state.busy || state.pending > 0
+                                    ? null
+                                    : () => store.resolve(conflict, true),
+                                child: const Text('Применить мой срок'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              for (final blocked in state.blocked)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Не удалось отправить изменение: ${blocked['blocked_error']}',
+                        ),
+                        const Text(
+                          'Изменение сохранено локально. Уберите его из очереди, чтобы продолжить синхронизацию.',
+                        ),
+                        TextButton(
+                          onPressed: state.busy
+                              ? null
+                              : () => _discardBlocked(blocked),
+                          child: const Text('Убрать изменение из очереди'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              for (final notice in state.notices)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(notice),
+                        TextButton(
+                          onPressed: () => store.dismissNotice(notice),
+                          child: const Text('Понятно'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               if (lists.isNotEmpty) ...[
                 DropdownButtonFormField<int>(
                   key: ValueKey(state.data['list_id']),
@@ -106,7 +259,7 @@ class _ShoppingPageState extends ConsumerState<ShoppingPage> {
                     padding: EdgeInsets.only(top: 8),
                     child: Text('Главный семейный список'),
                   ),
-                if (parent)
+                if (parent && !state.offline)
                   ExpansionTile(
                     title: const Text('Управление списками'),
                     children: [
@@ -291,9 +444,10 @@ class _ShoppingPageState extends ConsumerState<ShoppingPage> {
                           Wrap(
                             spacing: 8,
                             children: [
-                              if (item['returned_at'] == null)
+                              if (item['returned_at'] == null &&
+                                  item['pending'] != true)
                                 TextButton(
-                                  onPressed: state.busy
+                                  onPressed: state.busy || state.offline
                                       ? null
                                       : () => store.run(
                                           (api) => api.returnShopping(
@@ -304,10 +458,11 @@ class _ShoppingPageState extends ConsumerState<ShoppingPage> {
                                   child: const Text('Вернуть сейчас'),
                                 ),
                               if (item['return_at'] != null &&
+                                  item['pending'] != true &&
                                   item['returned_at'] == null &&
                                   item['return_cancelled_at'] == null)
                                 TextButton(
-                                  onPressed: state.busy
+                                  onPressed: state.busy || state.offline
                                       ? null
                                       : () => store.run(
                                           (api) => api.returnShopping(

@@ -24,3 +24,27 @@ A one-time permission from a parent to join their family with a specified role o
 **Restriction**:
 A time-bounded restriction assigned to a child in a family, with a reason and a history of changes.
 _Avoid_: Punishment
+
+**Chore**:
+A scheduled household task, represented as either a regular check or a duty.
+
+**RegularCheck**:
+A recurring Yes/No question assigned to one member. Either answer finishes that check without a duty rating or debt.
+
+**Duty**:
+A scheduled household responsibility with an optional assigned member for each weekday. Completion can be performed by another member and confirmed by a parent.
+
+**DutyOccurrence**:
+One duty on one calendar date, with its original assignment and completion history.
+
+**DutyBalance**:
+A member's missed assigned duties minus confirmed duties performed for others. A positive balance is debt; ratings do not change it.
+
+**AwayPeriod**:
+An inclusive range of dates when the whole family is away and duties are excluded from the balance.
+
+**ShoppingItem**:
+An item currently needed by a family, with urgency and an optional category.
+
+**Purchase**:
+A record of buying a shopping item, optionally with a date to return it to the shared list.

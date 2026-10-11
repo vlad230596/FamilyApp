@@ -207,7 +207,10 @@ the free-text reason as a rule are not supported.
 An absent restriction is phrased as "В FamilyApp ... нет ограничения", not as a
 new parental permission. Queries never read the reason or audit history aloud.
 Long summaries stop before 1800 characters and direct the listener to the app
-for the rest. Follow-up context is signed, bound to the OAuth grant, expires
+for the rest. Completed restriction answers return `end_session: true`, including
+empty and truncated summaries. Clarification questions keep the session open;
+name/activity replies can finish the query before the skill exits.
+Follow-up context is signed, bound to the OAuth grant, expires
 after 30 minutes, and is returned via `session_state`. Forged context is ignored.
 After account linking the skill reads today's summary; it does not restore the
 exact pre-linking question in this version.
@@ -215,6 +218,19 @@ exact pre-linking question in this version.
 ## Verification
 
 ### Shopping voice extension (release 0.4.0)
+
+Release 0.4.0 was deployed on 2026-10-08 through the existing release workflow.
+The isolated release passed 108 backend tests. Both production containers are
+healthy and report version 0.4.0. Live HTTPS authorization accepts the combined
+scope and each individual shopping scope; unknown scopes are rejected. The
+shopping API requires authentication. Real account linking and shopping voice
+commands should now be verified by the owner after reconnecting the account.
+
+The activation phrases "Алиса, скажи семейному помощнику купить хлеб" and
+"Алиса, спроси у семейного помощника что нужно купить" are handled on the
+backend as `request.command` values `купить хлеб` and `что нужно купить`.
+Yandex handles skill activation; speaker recognition still needs a live check.
+Short `купи хлеб` / `купить хлеб` commands add an item rather than mark it bought.
 
 The shared family shopping list can be read and one item can be added per
 command. Supported examples: "Что нужно купить?", "Прочитай список покупок",

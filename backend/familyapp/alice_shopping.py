@@ -15,6 +15,7 @@ def answer_shopping(command, previous, respond, clean):
     normalized = text.casefold().replace("ё", "е")
     add = re.fullmatch(r"(?:добавь|добавить|запиши|записать)(?:\s+пожалуйста)?\s+(?:в\s+)?(?:список покупок|список|покупки)(?:\s+(.+))?", normalized)
     trailing = re.fullmatch(r"(?:добавь|добавить|запиши|записать)\s+(.+?)\s+в\s+(?:список покупок|список|покупки)", normalized)
+    buy = re.fullmatch(r"(?:купи|купить)(?:\s+пожалуйста)?(?:\s+(.+))?", normalized)
     read = normalized in {
         "что нужно купить", "что надо купить", "что купить", "нужно купить", "список покупок",
         "что в списке покупок", "что у нас в списке покупок", "прочитай список покупок",
@@ -25,7 +26,7 @@ def answer_shopping(command, previous, respond, clean):
         return respond("Добавление отменено.", end=True)
     if not (add or trailing or read) and re.search(r"\b(?:купил[аи]?|куплено|удали|убери|вычеркни)\b", normalized):
         return respond("Отмечать покупки и удалять товары пока можно только в приложении.", end=True)
-    if not (add or trailing or read or pending):
+    if not (add or trailing or buy or read or pending):
         return None
     permission = oauth.SHOPPING_READ if read else oauth.SHOPPING_WRITE
     if not oauth.has_scope(permission):
@@ -42,7 +43,7 @@ def answer_shopping(command, previous, respond, clean):
                 break
             lines.append(label + ("." if index == len(items) - 1 else ";"))
         return respond(" ".join(lines), end=True)
-    match = add or trailing
+    match = add or trailing or buy
     if match and match.group(1):
         # Preserve the original spelling and punctuation of the item name.
         start, end = match.span(1)

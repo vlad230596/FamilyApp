@@ -58,6 +58,12 @@ def init_db() -> None:
             FOREIGN KEY (member_id) REFERENCES members (id)
         );
 
+        CREATE TABLE IF NOT EXISTS auth_rate_limits (
+            key TEXT PRIMARY KEY,
+            attempts INTEGER NOT NULL,
+            resets_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS restriction_types (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,

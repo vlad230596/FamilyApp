@@ -6,7 +6,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from flask import g
+from flask import g, request
+from werkzeug.exceptions import TooManyRequests
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -23,6 +24,34 @@ from .persistence import get_db, now_iso, validate_member_icon, family_id
 
 MEMBER_COLUMNS = "m.id, m.name, m.icon, m.role, m.family_id, m.user_id, u.login, u.password_hash, m.created_at, m.updated_at"
 MEMBER_FROM = "members m LEFT JOIN users u ON u.id = m.user_id"
+LOGIN_DUMMY_HASH = generate_password_hash(secrets.token_urlsafe(32))
+
+
+def limit_login_attempts(login_value: str, *, registration: bool = False) -> None:
+    """Apply atomic, persistent limits without storing raw logins or addresses."""
+    now = datetime.now(timezone.utc)
+    reset = (now + timedelta(seconds=60)).isoformat()
+    # Do not trust forwarded headers without an explicitly configured proxy.
+    prefix = "register:" if registration else "login:"
+    keys = [(f"{prefix}address:{request.remote_addr or 'unknown'}", 10 if registration else 30),
+            (f"{prefix}account:{login_value}", 3 if registration else 10)]
+    retry_after = 0
+    db = get_db()
+    with db:
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("DELETE FROM auth_rate_limits WHERE resets_at <= ?", (now.isoformat(),))
+        for raw_key, limit in keys:
+            key = hash_token(raw_key)
+            db.execute("INSERT OR IGNORE INTO auth_rate_limits VALUES (?, 0, ?)", (key, reset))
+            db.execute("UPDATE auth_rate_limits SET attempts = attempts + 1 WHERE key = ?", (key,))
+            row = db.execute("SELECT attempts, resets_at FROM auth_rate_limits WHERE key = ?", (key,)).fetchone()
+            if row["attempts"] > limit:
+                remaining = (datetime.fromisoformat(row["resets_at"]) - now).total_seconds()
+                retry_after = max(retry_after, max(1, int(remaining + 0.999)))
+    if retry_after:
+        action = "регистрации" if registration else "входа"
+        raise TooManyRequests(description=f"Слишком много попыток {action}. Подождите минуту и повторите.",
+                              retry_after=retry_after)
 
 
 def create_member(
@@ -92,6 +121,7 @@ def set_credentials(
 
 
 def register(name: str, login_value: str, password: str):
+    limit_login_attempts((login_value or "").strip().lower(), registration=True)
     name = clean_name(name)
     login_value = normalize_login(login_value)
     validate_password(password)
@@ -108,8 +138,11 @@ def register(name: str, login_value: str, password: str):
 
 
 def login(login_value: str, password: str):
-    row = get_db().execute("SELECT * FROM users WHERE login = ?", ((login_value or "").strip().lower(),)).fetchone()
-    if not row or not check_password_hash(row["password_hash"], password or ""):
+    cleaned_login = (login_value or "").strip().lower()
+    limit_login_attempts(cleaned_login)
+    row = get_db().execute("SELECT * FROM users WHERE login = ?", (cleaned_login,)).fetchone()
+    valid = check_password_hash(row["password_hash"] if row else LOGIN_DUMMY_HASH, password or "")
+    if not row or not valid:
         raise AuthError("invalid login or password")
     return start_session_for(row["id"]), row["id"]
 

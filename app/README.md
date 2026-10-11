@@ -21,6 +21,11 @@ Shopping, and Family. Phones use bottom navigation; expanded windows use a
 sidebar. Today summarizes household duties, checks, parent confirmations, and
 restrictions using the signed-in member's existing permissions. The calendar
 and its restriction history remain available separately from the daily summary.
+
+Shopping lists can be opened, added to, and marked bought offline after an
+initial online load. Local changes survive restart and synchronize automatically.
+See [offline shopping](../docs/offline-shopping.md) for merge rules, background
+scheduling, and the limits of offline web launches.
 Family contains account, member, invitation, and restriction type settings.
 
 The theme uses navy, sunflower yellow, and coral from the existing house icon.

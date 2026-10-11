@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:familyapp/main.dart';
+import 'package:familyapp/api/api_client.dart';
 import 'package:familyapp/models/member.dart';
 import 'package:familyapp/services/background_reminder_sync.dart';
 import 'package:familyapp/state/auth_store.dart';
 import 'package:familyapp/state/family_store.dart';
+import 'package:familyapp/state/household_store.dart';
 import 'package:familyapp/utils/dates.dart';
 import 'widget_test.dart'
     show FakeApiClient, MemoryTokenStorage, NoBackgroundSync, fakeMember;
@@ -52,7 +54,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Дача').last);
     await tester.pumpAndSettle();
-    expect(api.selected, 2);
+    expect(
+      tester
+          .widget<DropdownButtonFormField<int>>(
+            find.byType(DropdownButtonFormField<int>),
+          )
+          .initialValue,
+      2,
+    );
     await tester.tap(find.text('Управление списками'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Сделать главным'));
@@ -142,7 +151,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('shopping form keeps entered data after server error', (
+  testWidgets('shopping server validation error preserves the local change', (
     tester,
   ) async {
     final api = HouseholdApi()..failSave = true;
@@ -157,14 +166,14 @@ void main() {
     );
     await tester.tap(find.text('Сохранить'));
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
-    expect(find.text('Хлеб'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(FamilyApp)),
+    );
+    expect(container.read(shoppingStoreProvider).pending, 1);
     expect(
-      find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.text('Нет связи'),
-      ),
-      findsOneWidget,
+      container.read(shoppingStoreProvider).blocked.single['name'],
+      'Хлеб',
     );
   });
 
@@ -283,7 +292,7 @@ class HouseholdApi extends FakeApiClient {
   };
   @override
   Future<void> addShopping(Map<String, dynamic> data) async {
-    if (failSave) throw Exception('Нет связи');
+    if (failSave) throw ApiException(400, 'Название отклонено сервером');
     added = data;
     items.add({'id': 1, ...data});
   }
@@ -333,6 +342,17 @@ class MultiListApi extends HouseholdApi {
     ],
     'items': [],
     'purchases': [],
+  };
+  @override
+  Future<Map<String, dynamic>> shoppingSnapshot() async => {
+    'lists': [
+      for (final list in lists)
+        {...list, 'is_main': list['id'] == main ? 1 : 0},
+    ],
+    'snapshots': [
+      for (final list in lists)
+        {'list_id': list['id'], 'items': [], 'purchases': []},
+    ],
   };
   @override
   Future<Map<String, dynamic>> shopping() async {

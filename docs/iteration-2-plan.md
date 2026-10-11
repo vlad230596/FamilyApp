@@ -1,5 +1,15 @@
 # Iteration 2 Plan
 
+## Status (2026-10-07)
+
+Implemented: settings-based member management, reusable and one-off
+restriction types, duration forms, in-form validation, and the colored calendar.
+The current navigation starts with the calendar, with today selected. Its
+"Today for children" overview shows each child's active restrictions, colors,
+and end dates. A single color tints the card; multiple restrictions have separate
+colored markers and labels. Children without restrictions have an explicit empty
+state. This overview shares the calendar page instead of adding another main tab.
+
 ## Goal
 
 Improve the restriction workflow so the app feels closer to daily use by a

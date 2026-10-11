@@ -9,17 +9,41 @@ import 'package:familyapp/api/api_client.dart';
 import 'package:familyapp/config.dart';
 import 'package:familyapp/services/chore_notifications.dart';
 import 'package:familyapp/state/auth_store.dart';
+import 'package:familyapp/services/local_storage.dart';
+import 'package:familyapp/services/shopping_sync.dart';
 
 final backgroundReminderSyncProvider = Provider(
   (ref) => BackgroundReminderSync(),
 );
 const _workName = 'familyapp-reminder-sync';
 const _contextKey = 'reminder_sync_context';
+const _shoppingWorkName = 'familyapp-shopping-sync';
+const _shoppingPeriodicWorkName = 'familyapp-shopping-recovery';
+const _shoppingContextKey = 'shopping_sync_context';
 
 @pragma('vm:entry-point')
 void reminderSyncDispatcher() {
   WidgetsFlutterBinding.ensureInitialized();
   Workmanager().executeTask((task, inputData) async {
+    if (task == _shoppingWorkName) {
+      final storage = LocalStorage();
+      final tokenStorage = TokenStorage();
+      final context = await storage.read(_shoppingContextKey);
+      final token = await tokenStorage.read();
+      if (context == null || token == null) return true;
+      final owner = jsonDecode(context) as Map<String, dynamic>;
+      final api = ApiClient(apiBaseUrl)..token = token;
+      return replayShoppingInBackground(
+        api: api,
+        storage: storage,
+        key: owner['key'] as String,
+        familyId: owner['family_id'] as int,
+        memberId: owner['member_id'] as int,
+        current: () async =>
+            await storage.read(_shoppingContextKey) == context &&
+            await tokenStorage.read() == token,
+      );
+    }
     if (task != _workName) return true;
     const storage = FlutterSecureStorage();
     final tokenStorage = TokenStorage();
@@ -108,6 +132,35 @@ class BackgroundReminderSync {
   bool get supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+  Future<void> scheduleShopping(int memberId, int familyId, String key) =>
+      _enqueue(() async {
+        if (!supported) return;
+        _initialization ??= Workmanager().initialize(reminderSyncDispatcher);
+        await _initialization;
+        await _storage.write(
+          key: _shoppingContextKey,
+          value: jsonEncode({
+            'member_id': memberId,
+            'family_id': familyId,
+            'key': key,
+          }),
+        );
+        await Workmanager().registerOneOffTask(
+          _shoppingWorkName,
+          _shoppingWorkName,
+          existingWorkPolicy: ExistingWorkPolicy.keep,
+          constraints: Constraints(networkType: NetworkType.connected),
+        );
+        // Recover edits queued while an earlier one-off worker was finishing.
+        await Workmanager().registerPeriodicTask(
+          _shoppingPeriodicWorkName,
+          _shoppingWorkName,
+          frequency: const Duration(minutes: 15),
+          existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+          constraints: Constraints(networkType: NetworkType.connected),
+        );
+      });
+
   Future<void> configure(int memberId, int familyId) => _enqueue(() async {
     if (!supported) return;
     _initialization ??= Workmanager().initialize(reminderSyncDispatcher);
@@ -133,7 +186,10 @@ class BackgroundReminderSync {
     if (!supported) return;
     // Invalidate an in-flight worker before cancelling its native work/alarms.
     await _storage.delete(key: _contextKey);
+    await _storage.delete(key: _shoppingContextKey);
     await Workmanager().cancelByUniqueName(_workName);
+    await Workmanager().cancelByUniqueName(_shoppingWorkName);
+    await Workmanager().cancelByUniqueName(_shoppingPeriodicWorkName);
   });
   Future<void> _enqueue(Future<void> Function() action) {
     final next = _queue.then((_) => action());

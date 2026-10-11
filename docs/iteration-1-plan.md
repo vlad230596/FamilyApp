@@ -1,5 +1,11 @@
 # Iteration 1 Plan
 
+## Status (2026-10-07)
+
+Implemented. The original parent-admin/child foundation has since evolved into
+independent users and family memberships. This document retains the original
+scope; see Iteration 3 for the current account model and remaining work.
+
 ## Goal
 
 Create the first working foundation for FamilyApp: a Flask backend, a Flutter

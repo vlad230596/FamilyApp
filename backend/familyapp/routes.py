@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import wraps
 
 from flask import Blueprint, g, jsonify, request
+from werkzeug.exceptions import TooManyRequests
 
 from .accounts import (
     authenticate,
@@ -46,6 +47,14 @@ from . import duties, shopping
 api = Blueprint("api", __name__)
 
 PUBLIC_ENDPOINTS = {"api.health", "api.auth_register", "api.auth_login"}
+
+
+@api.errorhandler(TooManyRequests)
+def handle_login_rate_limit(error):
+    response = jsonify({"error": error.description, "status": 429})
+    response.status_code = 429
+    response.headers["Retry-After"] = str(error.retry_after)
+    return response
 
 
 @api.errorhandler(DomainError)
@@ -193,6 +202,16 @@ def away_cancel(period_id):
 @api.get("/api/shopping")
 def shopping_list():
     return jsonify(shopping.list_shopping(None if request.args.get("list_id") is None else parse_positive_int(request.args.get("list_id"), "list_id")))
+
+
+@api.get('/api/shopping/snapshot')
+def shopping_snapshot():
+    return jsonify(shopping.snapshot())
+
+
+@api.post('/api/shopping/sync')
+def shopping_sync():
+    return jsonify(shopping.sync_operation(request_payload()))
 
 
 @api.post("/api/shopping/lists")

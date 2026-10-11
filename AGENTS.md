@@ -103,9 +103,12 @@ Initial domain concepts:
   to an existing member. Its role is chosen by a parent.
 - Parents (all equal) manage family settings and restrictions. Children see
   their own data and can do limited actions.
-- `Chore` - a household task with a schedule (daily or chosen weekdays) and an
-  optional duty member per weekday. Planned, see `docs/iteration-3-plan.md`.
-- `ShoppingItem` - an item on the shared shopping list with an urgency. Planned.
+- `Chore` - a scheduled household task: a regular Yes/No check or a duty.
+  Checks have one responsible member with an account and no debt or confirmation.
+  Duties have weekday assignees, separate performers and markers, parent
+  confirmation, ratings, away periods, and a fairness balance.
+- `ShoppingItem` - an item on the shared shopping list with an urgency and optional
+  category. Bought items preserve purchase history and may return after N days.
 - `Restriction` - a time-bounded restriction assigned to a child.
 - Restriction fields should include child, start date, end date, reason, status,
   and audit information for who created or changed it.
@@ -127,8 +130,9 @@ Initial domain concepts:
 
 ## Future Integration
 
-Yandex Alice integration is planned but should not be implemented yet unless
-explicitly requested. The integration will be broad: restriction status, who is
+The first read-only Yandex Alice restriction adapter is present in the working
+tree; see `docs/alice.md`. Live verification is not confirmed. Further integration
+should be implemented only when explicitly requested. Its planned scope is: restriction status, who is
 on duty today, marking duties as done, and the shopping list. Keep all business
 logic on the backend (the Flutter app is just one client) and keep the API
 voice-friendly so a future Alice skill can use it.

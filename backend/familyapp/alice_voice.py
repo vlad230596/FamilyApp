@@ -219,14 +219,14 @@ def answer(payload):
             return spoken_response("Назовите имя ребёнка из подключённой семьи.")
         prefix = clean_label(child["name"]) + ": "
         if not current:
-            return spoken_response(prefix + f"в FamilyApp на {day:%d.%m.%Y} нет ограничения на это занятие.", context=context)
+            return spoken_response(prefix + f"в FamilyApp на {day:%d.%m.%Y} нет ограничения на это занятие.", end=True, context=context)
         free = next_free_day(selected, day)
         label = clean_label(current[0]["type_name"])
         ending = f"По текущему расписанию оно перестанет действовать с {free:%d.%m.%Y}." if free else "Дата окончания выходит за пределы календаря. Проверьте её в приложении."
-        return spoken_response(prefix + f"на {day:%d.%m.%Y} действует ограничение «{label}». " + ending, context=context)
+        return spoken_response(prefix + f"на {day:%d.%m.%Y} действует ограничение «{label}». " + ending, end=True, context=context)
     if not current:
         who = clean_label(matches[0]["name"]) + ": " if matches else ""
-        return spoken_response(who + f"на {day:%d.%m.%Y} ограничений в FamilyApp нет.", context=context)
+        return spoken_response(who + f"на {day:%d.%m.%Y} ограничений в FamilyApp нет.", end=True, context=context)
     lines = [f"Ограничения на {day:%d.%m.%Y}."]
     for child in children:
         rows = [r for r in current if r["child_id"] == child["id"]]
@@ -236,6 +236,6 @@ def answer(payload):
             line = f"{clean_label(child['name'])}: {clean_label(row['type_name'])}, последний день — {date.fromisoformat(row['end_date']):%d.%m.%Y}."
             if sum(len(s) for s in lines) + len(line) > 1700:
                 lines.append("Остальные ограничения можно посмотреть в приложении FamilyApp.")
-                return spoken_response(" ".join(lines), context=context)
+                return spoken_response(" ".join(lines), end=True, context=context)
             lines.append(line)
-    return spoken_response(" ".join(lines), context=context)
+    return spoken_response(" ".join(lines), end=True, context=context)

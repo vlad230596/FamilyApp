@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:familyapp/api/api_client.dart';
@@ -5,6 +6,7 @@ import 'package:familyapp/models/member.dart';
 import 'package:familyapp/state/family_store.dart';
 import 'package:familyapp/services/chore_notifications.dart';
 import 'package:familyapp/services/background_reminder_sync.dart';
+import 'package:familyapp/services/local_storage.dart';
 
 /// Persists the session token between app launches.
 class TokenStorage {
@@ -44,6 +46,7 @@ class AuthState {
 
 class AuthStore extends Notifier<AuthState> {
   var _started = false;
+  Future<void> _accountWrites = Future.value();
 
   @override
   AuthState build() {
@@ -63,14 +66,31 @@ class AuthStore extends Notifier<AuthState> {
       final token = await ref.read(tokenStorageProvider).read();
       if (token != null) {
         api.token = token;
+        Map<String, dynamic>? cached;
         try {
-          _applyAccount(await api.accountState());
+          final saved = await ref
+              .read(localStorageProvider)
+              .read('offline_account_v1');
+          if (saved != null) {
+            final data = jsonDecode(saved) as Map<String, dynamic>;
+            if (data['session_token'] == token) {
+              cached = data['account'] as Map<String, dynamic>;
+            }
+          }
+        } catch (_) {
+          // A missing/unreadable cache must not prevent online sign-in.
+        }
+        if (cached != null) await _applyAccount(cached, persist: false);
+        try {
+          final account = await api.accountState();
+          if (!ref.mounted || api.token != token) return;
+          await _applyAccount(account);
           return;
         } on UnauthorizedException {
           await ref.read(tokenStorageProvider).delete();
           api.token = null;
         } on Exception {
-          // Server unreachable: keep the saved token and retry on next check.
+          if (cached != null && api.token == token) return;
           api.token = null;
         }
       }
@@ -111,7 +131,7 @@ class AuthStore extends Notifier<AuthState> {
 
   /// Refreshes the signed-in member after their profile was edited.
   Future<void> reloadMember() async {
-    _applyAccount(await ref.read(apiClientProvider).accountState());
+    await _applyAccount(await ref.read(apiClientProvider).accountState());
   }
 
   Future<void> _authenticate(Future<AuthResult> Function() request) async {
@@ -128,7 +148,7 @@ class AuthStore extends Notifier<AuthState> {
       api.token = result.token;
       await ref.read(tokenStorageProvider).write(api.token!);
       ref.invalidate(familyStoreProvider);
-      _applyAccount(result.account!);
+      await _applyAccount(result.account!);
     } catch (exception) {
       state = AuthState(
         status: state.status,
@@ -147,7 +167,10 @@ class AuthStore extends Notifier<AuthState> {
     );
   }
 
-  void _applyAccount(Map<String, dynamic> data) {
+  Future<void> _applyAccount(
+    Map<String, dynamic> data, {
+    bool persist = true,
+  }) async {
     final member = data['member'] == null
         ? null
         : Member.fromJson(data['member']);
@@ -161,6 +184,22 @@ class AuthStore extends Notifier<AuthState> {
     // A normal restore keeps visible unanswered alerts. Sync filters their owner.
     if (changedMember || member == null) _clearReminders();
     ref.invalidate(familyStoreProvider);
+    if (persist) {
+      final token = ref.read(apiClientProvider).token;
+      final storage = ref.read(localStorageProvider);
+      final next = _accountWrites.then((_) async {
+        if (ref.mounted &&
+            token != null &&
+            ref.read(apiClientProvider).token == token) {
+          await storage.write(
+            'offline_account_v1',
+            jsonEncode({'session_token': token, 'account': data}),
+          );
+        }
+      });
+      _accountWrites = next.catchError((Object _) {});
+      await _accountWrites;
+    }
   }
 
   Future<void> familyAction(
@@ -173,7 +212,7 @@ class AuthStore extends Notifier<AuthState> {
       busy: true,
     );
     try {
-      _applyAccount(await action());
+      await _applyAccount(await action());
     } catch (exception) {
       state = AuthState(
         status: state.status,
@@ -197,6 +236,8 @@ class AuthStore extends Notifier<AuthState> {
     state = AuthState(status: AuthStatus.signedOut, error: error);
     await _clearReminders();
     await ref.read(tokenStorageProvider).delete();
+    await _accountWrites;
+    await ref.read(localStorageProvider).delete('offline_account_v1');
     ref.invalidate(familyStoreProvider);
   }
 

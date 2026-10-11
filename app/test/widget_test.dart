@@ -294,6 +294,8 @@ class MemoryTokenStorage extends TokenStorage {
 
 class NoBackgroundSync extends BackgroundReminderSync {
   @override
+  Future<void> scheduleShopping(int memberId, int familyId, String key) async {}
+  @override
   Future<void> configure(int memberId, int familyId) async {}
   @override
   Future<void> clear() async {}
@@ -366,6 +368,37 @@ class FakeApiClient extends ApiClient {
     'items': [],
     'purchases': [],
   };
+
+  @override
+  Future<Map<String, dynamic>> shoppingSnapshot() async {
+    final data = await shopping();
+    return {
+      'lists':
+          data['lists'] ??
+          [
+            {'id': 1, 'name': 'Главный', 'is_main': 1},
+          ],
+      'snapshots': [
+        {...data, 'list_id': data['list_id'] ?? 1},
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> syncShopping(
+    Map<String, dynamic> operation,
+  ) async {
+    switch (operation['kind']) {
+      case 'add':
+        await addShopping(operation);
+        return {'status': 'applied', 'item_key': operation['operation_id']};
+      case 'buy':
+        await buyShopping(1, operation['return_in_days'] as int?);
+        return {'status': 'applied'};
+      default:
+        return {'status': 'applied'};
+    }
+  }
 
   @override
   Future<List<Member>> listMembers() async => [member];

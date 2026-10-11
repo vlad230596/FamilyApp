@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:http/http.dart';
 import 'package:http/http.dart' as http;
@@ -17,6 +18,19 @@ class UnauthorizedException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class ApiException implements Exception {
+  ApiException(this.statusCode, this.message);
+  final int statusCode;
+  final String message;
+  @override
+  String toString() => message;
+}
+
+class ServerUnavailableException implements Exception {
+  @override
+  String toString() => 'Нет связи с сервером.';
 }
 
 /// Result of a successful login or registration.
@@ -86,6 +100,10 @@ class ApiClient {
 
   Future<Map<String, dynamic>> duties() => _get('/api/duties');
   Future<Map<String, dynamic>> shopping() => _get('/api/shopping');
+  Future<Map<String, dynamic>> shoppingSnapshot() =>
+      _get('/api/shopping/snapshot');
+  Future<Map<String, dynamic>> syncShopping(Map<String, dynamic> operation) =>
+      _post('/api/shopping/sync', operation);
   Future<void> saveDuty(Map<String, dynamic> data, {int? id}) async {
     await _post(id == null ? '/api/duties' : '/api/duties/$id', data);
   }
@@ -315,9 +333,11 @@ class ApiClient {
   ) async {
     late final http.Response response;
     try {
-      response = await request();
+      response = await request().timeout(const Duration(seconds: 10));
     } on ClientException {
-      throw Exception('Сервер не подключен. Запустите backend на $_baseUri.');
+      throw ServerUnavailableException();
+    } on TimeoutException {
+      throw ServerUnavailableException();
     }
     return _decode(response);
   }
@@ -341,13 +361,17 @@ class ApiClient {
     }
     if (response.statusCode == 403) {
       final error = data['error'] as String?;
-      throw Exception(
+      throw ApiException(
+        response.statusCode,
         _errorTranslations[error] ?? 'Это действие доступно только родителям.',
       );
     }
     if (response.statusCode >= 400) {
       final error = data['error'] as String?;
-      throw Exception(_errorTranslations[error] ?? error ?? 'Ошибка сервера');
+      throw ApiException(
+        response.statusCode,
+        _errorTranslations[error] ?? error ?? 'Ошибка сервера',
+      );
     }
     return data;
   }

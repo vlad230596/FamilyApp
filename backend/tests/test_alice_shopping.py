@@ -1,3 +1,5 @@
+import pytest
+
 from test_alice import alice_client, exchange, get_code, voice
 from familyapp.persistence import get_db
 
@@ -12,6 +14,31 @@ def token(client, scope=SCOPES):
 
 def items(client):
     return client.get("/api/shopping").get_json()["items"]
+
+
+@pytest.mark.parametrize("command", ["купить хлеб", "Купи Хлеб!", "купить пожалуйста хлеб"])
+def test_short_activation_commands_add_and_read(alice_client, command):
+    access = token(alice_client)["access_token"]
+    added = voice(alice_client, access, command, session={
+        "skill_id": "test-skill", "new": True, "user": {"access_token": access}})
+    assert added["response"]["end_session"] is True
+    assert len(items(alice_client)) == 1
+    assert items(alice_client)[0]["name"].casefold() == "хлеб"
+    read = voice(alice_client, access, "что нужно купить")
+    assert "хлеб" in read["response"]["text"].casefold()
+    assert read["response"]["end_session"] is True
+
+
+def test_short_buy_requires_name_and_write_permission(alice_client):
+    access = token(alice_client)["access_token"]
+    ask = voice(alice_client, access, "купить")
+    assert ask["response"]["end_session"] is False
+    added = voice(alice_client, access, "Хлеб", state=ask["session_state"])
+    assert added["response"]["end_session"] is True
+    read_only = token(alice_client, "shopping:read")["access_token"]
+    denied = voice(alice_client, read_only, "купить молоко")
+    assert "переподключите" in denied["response"]["text"]
+    assert len(items(alice_client)) == 1
 
 
 def test_alice_uses_only_the_current_main_list(alice_client):

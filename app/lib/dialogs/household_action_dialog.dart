@@ -63,31 +63,41 @@ class _HouseholdActionDialogState extends ConsumerState<HouseholdActionDialog> {
         ? ref.read(shoppingStoreProvider.notifier)
         : ref.read(dutiesStoreProvider.notifier);
     final id = widget.item?['id'] as int?;
-    final saved = await store.run((api) async {
-      switch (widget.action) {
-        case HouseholdAction.shopping:
-          await api.addShopping({
-            'list_id': ref.read(shoppingStoreProvider).data['list_id'],
+    final saved = widget.action == HouseholdAction.shopping
+        ? await ref.read(shoppingStoreProvider.notifier).add({
             'name': _name,
             'category': _category,
             'urgency': _urgency,
-          });
-        case HouseholdAction.buy:
-          await api.buyShopping(
-            id!,
-            _days.trim().isEmpty ? null : int.parse(_days),
-          );
-        case HouseholdAction.complete:
-          await api.completeDuty(id!, {
-            'performer_member_id': _performer,
-            'rating': _rating,
-          });
-        case HouseholdAction.review:
-          await api.reviewDuty(id!, _approved, _rating);
-        case HouseholdAction.away:
-          await api.saveAway(dateToIso(_start), dateToIso(_end));
-      }
-    }, mutation: true);
+          })
+        : widget.action == HouseholdAction.buy
+        ? await ref
+              .read(shoppingStoreProvider.notifier)
+              .buy(widget.item!, _days.trim().isEmpty ? null : int.parse(_days))
+        : await store.run((api) async {
+            switch (widget.action) {
+              case HouseholdAction.shopping:
+                await api.addShopping({
+                  'list_id': ref.read(shoppingStoreProvider).data['list_id'],
+                  'name': _name,
+                  'category': _category,
+                  'urgency': _urgency,
+                });
+              case HouseholdAction.buy:
+                await api.buyShopping(
+                  id!,
+                  _days.trim().isEmpty ? null : int.parse(_days),
+                );
+              case HouseholdAction.complete:
+                await api.completeDuty(id!, {
+                  'performer_member_id': _performer,
+                  'rating': _rating,
+                });
+              case HouseholdAction.review:
+                await api.reviewDuty(id!, _approved, _rating);
+              case HouseholdAction.away:
+                await api.saveAway(dateToIso(_start), dateToIso(_end));
+            }
+          }, mutation: true);
     if (!mounted) return;
     if (saved) {
       Navigator.pop(context);
