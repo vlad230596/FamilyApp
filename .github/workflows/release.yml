@@ -97,7 +97,7 @@ jobs:
           VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_USER: ${{ github.repository_owner }}
           VERSION: ${{ needs.publish.outputs.version }}
           BACKEND: ghcr.io/vlad230596/familyapp-backend@${{ needs.publish.outputs.backend }}
           WEB: ghcr.io/vlad230596/familyapp-web@${{ needs.publish.outputs.web }}
