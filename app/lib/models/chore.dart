@@ -2,6 +2,7 @@ class Chore {
   Chore.fromJson(Map<String, dynamic> json)
     : id = json['id'] as int,
       title = json['title'] as String,
+      schedule = json['schedule'] as String? ?? 'recurring',
       responsibleMemberId = json['responsible_member_id'] as int,
       responsibleName = json['responsible_name'] as String,
       startDate = DateTime.parse(json['start_date'] as String),
@@ -17,6 +18,8 @@ class Chore {
 
   final int id;
   final String title;
+  final String schedule;
+  bool get isOnce => schedule == 'once';
   final int responsibleMemberId;
   final String responsibleName;
   final DateTime startDate;
@@ -30,7 +33,9 @@ class Chore {
   final bool? dueAnswer;
   final String? nextAt;
 
-  String get scheduleLabel => weekdays.isNotEmpty
+  String get scheduleLabel => isOnce
+      ? 'Одноразовое дело'
+      : weekdays.isNotEmpty
       ? weekdays.map((day) => weekdayLabels[day - 1]).join(', ')
       : intervalDays == 1
       ? 'Каждый день'

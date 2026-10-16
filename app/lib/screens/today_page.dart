@@ -33,6 +33,9 @@ class TodayPage extends ConsumerWidget {
           (item) =>
               item.active &&
               (item.dueDate == today ||
+                  (item.isOnce &&
+                      item.dueDate != null &&
+                      item.dueAnswer == null) ||
                   (item.nextAt != null &&
                       dateToIso(DateTime.parse(item.nextAt!).toLocal()) ==
                           today)),
@@ -220,16 +223,19 @@ class TodayPage extends ConsumerWidget {
                               ),
                             ),
                             subtitle: Text(
-                              '${chore.responsibleName} · ${chore.dueDate != today
+                              '${chore.responsibleName} · ${chore.isOnce && chore.dueDate != null && chore.dueDate!.compareTo(today) < 0 && chore.dueAnswer == null
+                                  ? 'Просрочено'
+                                  : chore.dueDate != today
                                   ? 'В ${chore.reminderTime}'
                                   : chore.dueAnswer == null
-                                  ? 'Проверка'
+                                  ? (chore.isOnce ? 'Ожидает выполнения' : 'Проверка')
                                   : chore.dueAnswer!
-                                  ? 'Да'
-                                  : 'Нет'}',
+                                  ? (chore.isOnce ? 'Выполнено' : 'Да')
+                                  : (chore.isOnce ? 'Отменено' : 'Нет')}',
                             ),
                           ),
-                          if (chore.dueDate == today &&
+                          if ((chore.dueDate == today ||
+                                  chore.isOnce && chore.dueDate != null) &&
                               chore.dueAnswer == null &&
                               chore.responsibleMemberId == auth.member?.id)
                             Wrap(
@@ -247,7 +253,9 @@ class TodayPage extends ConsumerWidget {
                                               chore.revision,
                                             ),
                                   icon: const Icon(Icons.check),
-                                  label: const Text('Да'),
+                                  label: Text(
+                                    chore.isOnce ? 'Выполнено' : 'Да',
+                                  ),
                                 ),
                                 OutlinedButton.icon(
                                   onPressed: checks.busy
@@ -261,7 +269,9 @@ class TodayPage extends ConsumerWidget {
                                               chore.revision,
                                             ),
                                   icon: const Icon(Icons.close),
-                                  label: const Text('Нет'),
+                                  label: Text(
+                                    chore.isOnce ? 'Отменить' : 'Нет',
+                                  ),
                                 ),
                               ],
                             ),

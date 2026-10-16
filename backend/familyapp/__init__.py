@@ -24,16 +24,24 @@ def create_app(test_config: dict | None = None) -> Flask:
         ALICE_SKILL_ID=os.environ.get("FAMILYAPP_ALICE_SKILL_ID", ""),
         ALICE_TIMEZONE=os.environ.get("FAMILYAPP_ALICE_TIMEZONE", "Europe/Moscow"),
         ALICE_COOKIE_SECURE=True,
+        ALICE_JOURNAL_RETENTION_DAYS=30,
     )
 
     if test_config:
         app.config.update(test_config)
+
+    from .shopping_names import analyzer
+    analyzer()
 
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     app.teardown_appcontext(close_db)
     app.register_blueprint(api)
     from .alice_routes import alice
     app.register_blueprint(alice)
+    from . import alice_journal
+    app.before_request(alice_journal.before_webhook)
+    app.after_request(alice_journal.record_response)
+    alice_journal.register_commands(app)
     app.config["ALICE_DUMMY_HASH"] = generate_password_hash("not-a-real-account")
     register_commands(app)
 
@@ -65,5 +73,6 @@ def create_app(test_config: dict | None = None) -> Flask:
         init_shopping()
         from .alice_oauth import init_alice
         init_alice()
+        alice_journal.init_journal()
 
     return app

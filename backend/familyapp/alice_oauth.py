@@ -13,7 +13,9 @@ from .persistence import get_db, now_iso
 SCOPE = "restrictions:read"
 SHOPPING_READ = "shopping:read"
 SHOPPING_WRITE = "shopping:write"
-SUPPORTED_SCOPES = {SCOPE, SHOPPING_READ, SHOPPING_WRITE}
+DUTIES_READ = "duties:read"
+DUTIES_WRITE = "duties:write"
+SUPPORTED_SCOPES = {SCOPE, SHOPPING_READ, SHOPPING_WRITE, DUTIES_READ, DUTIES_WRITE}
 
 
 def parse_scope(value):

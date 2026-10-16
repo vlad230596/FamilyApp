@@ -1,291 +1,377 @@
-# Alice integration
+# Интеграция с Алисой
 
-The Alice integration reads restrictions and, with separate permissions, reads
-and adds shopping items. It never creates, extends or cancels restrictions.
-The Flask backend hosts both the skill webhook and a confidential
-OAuth 2.0 authorization-code client. No Yandex Cloud function is required.
+## Текущая волна голосовых функций — 16.10.2026, реализована локально
 
-## VDS preparation status (2026-10-07)
+Конкретные поддерживаемые команды и их варианты находятся в
+[alice-commands.md](alice-commands.md). Проверки поведения, автоматический набор
+примеров и ручная приёмка — в [alice-scenarios.md](alice-scenarios.md). Если исторические
+записи ниже описывают продолжение диалога, приоритет имеет этот раздел.
+Любой голосовой ответ завершает навык, включая помощь, просьбы переформулировать
+и ошибки. Для помощи: «Помощь», «Справка», «Что ты умеешь?»,
+«Какие команды ты поддерживаешь?». После просьбы уточнить заново вызовите навык
+и повторите вопрос целиком.
 
-The server was accessed with the existing FamilyApp administration SSH key,
-using its already trusted IP host entry. At preparation time production was on release `0.2.0`;
-both FamilyApp containers are healthy and `/health` returns `{"status":"ok"}`.
-No release, image replacement, container recreation or Caddy reload was performed during preparation. Deployment was completed on 2026-10-08; see Verification below.
+Полный набор разрешений при привязке:
+`restrictions:read&shopping:read&shopping:write&duties:read&duties:write`.
+После развёртывания обновите идентификатор группы действий в консоли Яндекса
+и переподключите аккаунт родителя. Права существующих привязок не меняются.
+Алиса читает дежурства; команда «Миша выполнил дежурство помыть посуду» создаёт
+только черновик на подтверждение, даже если привязан аккаунт родителя.
+Исполнителя нужно назвать: голос не определяет, кто говорит. Изменение
+ограничений, назначение дежурств и оценки доступны только в приложении.
+Личные одноразовые напоминания в этой волне также доступны только в приложении.
 
-Created `/opt/familyapp/.alice.env`, owned by root with mode 0600, with client ID
-`familyapp-alice` and independently generated OAuth and cookie-signing secrets.
-The skill ID was initially empty. It is now configured as `068d075d-322a-4973-bf62-da2ddadee964`.
-The client secret alone was downloaded into the ignored local file
-`.tmp/alice-yandex-client-secret.txt`, with access restricted to the current
-Windows user. Its contents must only be pasted into the Yandex account-linking
-secret field; the cookie-signing secret stays on the server.
+### Нормализация голосовых покупок
 
-Prepared `/opt/familyapp/setup/alice/compose.prod.yaml` and
-`/opt/familyapp/setup/alice/Caddyfile.candidate`, plus timestamped originals and
-an operator note. Compose `config -q` and Caddy `validate` succeeded. Docker
-Compose on the server is 5.0.2. These files were initially staged. The Compose
-configuration is now active; Caddy was updated against its latest shared
-configuration, preserving the other projects.
+Перед сохранением голосовой покупки сервер использует локальный морфологический
+анализатор `pymorphy3` и словарь привычных названий из
+`backend/familyapp/shopping_names.py`. Примеры: «овощей» → «овощи»,
+«моркови» → «морковь», «молока» → «молоко», «яиц» → «яйца».
+Обрабатываются известные однословные товары. Составные названия, количества,
+бренды и слова вне словаря остаются в исходном виде. Регистр сохраняется
+для уже подходящего названия; при преобразовании сохраняются начальная
+заглавная буква или написание целиком прописными.
 
-The owner can create the Yandex skill and fill the fields below now. Live
-account linking can now be tested against the deployed adapter. The Yandex console's
-acceptance of port 8443 is still unverified.
+Повторное добавление после нормализации использует существующий товар
+в основном списке семьи без изменения его категории и срочности.
+Ручной ввод и старые записи автоматически не переименовываются.
+Журнал сохраняет исходную команду и фактический ответ с названием покупки.
+Внешние API не вызываются; русский словарь устанавливается вместе с серверной
+зависимостью из Poetry lock-файла и загружается один раз при запуске процесса.
 
-## Owner console checklist
+### Приватный журнал голосовых обращений
 
-1. Open [Yandex Dialogs](https://dialogs.yandex.ru/developer/) using the Yandex
-   account on the speaker. Create a dialog and select an Alice skill, or edit
-   the previously created skill.
-2. Choose a distinctive name, set access to Private, select the HTTPS webhook
-   backend from the table below, and leave screen-required disabled.
-3. On the account-linking tab, use client ID `familyapp-alice`, paste the local
-   client-secret file's contents, and set all URLs and scope from the table.
-   No separate Yandex ID OAuth application registration is needed: FamilyApp
-   is the OAuth authorization server for this integration.
-4. Fill the mandatory publication fields, including an icon, description,
-   category, developer details and activation examples. Suggested description:
-   "Помогает семье узнавать действующие ограничения детей и дату их окончания.
+Все ответы вебхука записываются в SQLite, таблица `alice_journal`, включая
+нераспознанные команды, привязку аккаунта и некорректные запросы. Сохраняются
+команда, исходная фраза при её наличии, голосовой ответ, результат обработки,
+HTTP-статус, длительность, признак завершения сессии и ID подключённой семьи
+для авторизованного запроса. Полные тела запросов, токены, заголовки, состояние
+сессии, IP-адреса и идентификаторы устройств и пользователей не копируются.
+Тексты могут содержать имена и семейные сведения; этот согласованный журнал
+проверки качества хранится отдельно от обычных логов приложения. Срок хранения —
+30 дней; старые записи удаляются при следующем ответе вебхука. Обращения
+к адресам OAuth не записываются. Публичного адреса для выгрузки нет.
+
+Команды оператора выполняются из `backend/` с доступом к нужной приватной базе:
+
+```powershell
+poetry run flask --app familyapp alice-journal-export --family-id 1 --review unreviewed --output <private-path.jsonl>
+poetry run flask --app familyapp alice-journal-review 123 --result incorrect --expected "Expected answer"
+```
+
+В `--output` укажите путь к приватному файлу; в `--expected` — ожидаемый ответ.
+Выгрузка не перезаписывает существующий файл. Значения ручной оценки:
+`unreviewed` — не проверено, `correct` — верно, `incorrect` — неверно.
+Автоматический результат `handled` означает, что команда обработана,
+но не подтверждает правильность ответа по смыслу. Для разбора ошибок выгружайте
+с `--review incorrect`. Обезличивайте полезные примеры перед добавлением в набор
+сценариев и пишите тесты, предотвращающие повторение ошибок. Исходные выгрузки
+не добавляйте в репозиторий. Для просмотра неавторизованных ошибок оператор
+может выбрать записи с `family_id IS NULL` непосредственно в приватной базе.
+Проверка на реальной колонке и доставка напоминаний Android выполняются вручную.
+
+Интеграция читает ограничения и, при отдельных разрешениях, читает и пополняет
+список покупок, читает дежурства и отправляет черновики голосовых отметок.
+Она не создаёт, не продлевает и не отменяет ограничения. Сервер Flask обслуживает
+вебхук навыка и конфиденциальный клиент OAuth 2.0 с обменом кода авторизации.
+Отдельная функция Yandex Cloud не требуется.
+
+## Подготовка VDS — запись от 07.10.2026
+
+Доступ к серверу выполнен существующим административным SSH-ключом FamilyApp
+по ранее доверенной записи IP-адреса. На момент подготовки на сервере был релиз
+`0.2.0`; оба контейнера FamilyApp исправны, `/health` возвращает `{"status":"ok"}`.
+Во время подготовки не выполнялись выпуск релиза, замена образов,
+пересоздание контейнеров или перезагрузка Caddy. Развёртывание завершено
+08.10.2026; см. раздел проверок ниже.
+
+Создан `/opt/familyapp/.alice.env`, владелец root, права 0600. В нём указан
+ID клиента `familyapp-alice` и независимо сгенерированные секреты OAuth
+и подписи cookie. ID навыка сначала был пустым; затем настроен
+`068d075d-322a-4973-bf62-da2ddadee964`.
+Только секрет клиента скачан в игнорируемый локальный файл
+`.tmp/alice-yandex-client-secret.txt`, доступный текущему пользователю Windows.
+Его содержимое предназначено только для поля секрета привязки аккаунта
+в Яндексе; секрет подписи cookie остаётся на сервере.
+
+Подготовлены `/opt/familyapp/setup/alice/compose.prod.yaml`
+и `/opt/familyapp/setup/alice/Caddyfile.candidate`, исходные копии с временными
+метками и заметка оператора. Проверки Compose `config -q` и Caddy `validate`
+прошли. Версия Docker Compose на сервере — 5.0.2. Сначала файлы были подготовлены
+отдельно; затем конфигурация Compose стала активной, а Caddy обновлён
+на основе актуальной общей конфигурации с сохранением других проектов.
+
+Владелец может создать навык Яндекса и заполнить поля ниже. Привязку аккаунта
+можно проверять на развёрнутом адаптере. Принятие порта 8443 консолью Яндекса
+на момент этой записи ещё не подтверждено.
+
+## Настройка в консоли владельцем
+
+1. Откройте [Яндекс Диалоги](https://dialogs.yandex.ru/developer/) под аккаунтом,
+   используемым на колонке. Создайте диалог типа «Навык Алисы» либо откройте
+   существующий навык.
+2. Выберите отличимое название, приватный доступ и HTTPS-вебхук из таблицы ниже.
+   Не включайте обязательное наличие экрана.
+3. На вкладке привязки аккаунта укажите ID клиента `familyapp-alice`, вставьте
+   содержимое локального файла секрета клиента и заполните адреса и разрешения
+   по таблице. Отдельное OAuth-приложение Яндекс ID не нужно: сервером
+   авторизации OAuth для этой интеграции выступает FamilyApp.
+4. Заполните обязательные поля публикации: иконку, описание, категорию,
+   сведения о разработчике и примеры активации. Предложенное исходное описание:
+   «Помогает семье узнавать действующие ограничения детей и дату их окончания.
    Требуется подключение учётной записи FamilyApp. Изменение ограничений
-   доступно только в приложении."
-5. Save the draft and send the skill ID from General information to the server
-   operator, who sets `FAMILYAPP_ALICE_SKILL_ID` before deployment.
-6. After server deployment, first check the Testing tab, link a parent account
-   and choose a family. Use the documented restriction questions. Then publish
-   privately and check activation and account linking on the actual speaker.
+   доступно только в приложении».
+5. Сохраните черновик и передайте ID навыка из общих сведений оператору сервера:
+   перед развёртыванием он задаст `FAMILYAPP_ALICE_SKILL_ID`.
+6. После развёртывания сначала проверьте вкладку тестирования, привяжите аккаунт
+   родителя и выберите семью. Задайте вопросы об ограничениях из документа.
+   Затем опубликуйте навык с приватным доступом и проверьте активацию
+   и привязку на настоящей колонке.
 
-References: [creating a skill](https://yandex.ru/dev/dialogs/alice/doc/ru/skill-create-console),
-[publication settings](https://yandex.ru/dev/dialogs/alice/doc/ru/publish-settings),
-[account-linking fields](https://yandex.ru/dev/dialogs/alice/doc/ru/auth/add-skill-to-console).
+Справка: [создание навыка](https://yandex.ru/dev/dialogs/alice/doc/ru/skill-create-console),
+[параметры публикации](https://yandex.ru/dev/dialogs/alice/doc/ru/publish-settings),
+[поля привязки аккаунта](https://yandex.ru/dev/dialogs/alice/doc/ru/auth/add-skill-to-console).
 
-## Endpoints and Yandex console settings
+## Адреса и параметры консоли Яндекса
 
-Production origin: `https://famly-app.duckdns.org:8443`.
+Рабочий адрес сервера: `https://famly-app.duckdns.org:8443`.
 
-| Console field | Value |
+| Поле консоли | Значение |
 | --- | --- |
-| Skill type | General/dialog skill |
-| Access | Private during initial testing |
+| Тип навыка | Обычный диалоговый навык Алисы |
+| Доступ | Приватный на этапе начального тестирования |
 | Backend / Webhook URL | `https://famly-app.duckdns.org:8443/integrations/alice/webhook` |
-| OAuth application identifier | Value of `FAMILYAPP_ALICE_CLIENT_ID` |
-| OAuth application secret | Value of `FAMILYAPP_ALICE_CLIENT_SECRET` |
-| Authorization URL | `https://famly-app.duckdns.org:8443/integrations/alice/authorize` |
-| Token URL | `https://famly-app.duckdns.org:8443/integrations/alice/token` |
-| Refresh token URL | Same `/integrations/alice/token` URL |
-| Action group identifier / scope | `restrictions:read&shopping:read&shopping:write` (shopping-enabled backend required) |
-| Device with a screen required | No |
+| Идентификатор приложения OAuth | Значение `FAMILYAPP_ALICE_CLIENT_ID` |
+| Секрет приложения OAuth | Значение `FAMILYAPP_ALICE_CLIENT_SECRET` |
+| URL авторизации | `https://famly-app.duckdns.org:8443/integrations/alice/authorize` |
+| URL получения токена | `https://famly-app.duckdns.org:8443/integrations/alice/token` |
+| URL обновления токена | Тот же адрес `/integrations/alice/token` |
+| Идентификатор группы действий / scope | `restrictions:read&shopping:read&shopping:write&duties:read&duties:write` — требуется актуальный сервер |
+| Требуется устройство с экраном | Нет |
 
-The only allowed OAuth redirect is exactly
-`https://social.yandex.net/broker/redirect`. Both HTTP Basic client authentication
-and form `client_id`/`client_secret` are supported. Token requests use
-`application/x-www-form-urlencoded`, with standard `authorization_code` or
-`refresh_token` grants. A code exchange must include the same `redirect_uri`.
+Единственный разрешённый адрес перенаправления OAuth:
+`https://social.yandex.net/broker/redirect`. Поддерживаются аутентификация клиента
+через HTTP Basic и поля формы `client_id` / `client_secret`. Запросы токена
+используют `application/x-www-form-urlencoded` и стандартные типы обмена
+`authorization_code` или `refresh_token`. При обмене кода нужен тот же `redirect_uri`.
 
-The server recognizes the documented phrases itself, so configuring Yandex
-intents is optional for this version. Activation is still handled by Yandex:
-choose and test a distinctive activation name, for example "Семейный помощник"
-(availability and approval are not guaranteed). Start the skill before asking
-the questions below. The console always treats the skill as active, so activation
-must also be tested on the real speaker.
+Сервер сам распознаёт описанные фразы, поэтому настройка намерений Яндекса
+в этой версии необязательна. Активацией занимается Яндекс: выберите и проверьте
+отличимое название, например «Семейный помощник»; доступность и одобрение названия
+не гарантированы. Перед вопросами запустите навык. В консоли навык всегда
+считается активным, поэтому активацию нужно отдельно проверить на колонке.
 
-## Server configuration and deployment
+## Настройка сервера и развёртывание
 
-The integration returns HTTP 503 until all three settings are provided:
+Интеграция отвечает HTTP 503, пока не заданы все три параметра:
 
-- `FAMILYAPP_ALICE_CLIENT_ID`: a chosen client identifier, e.g. `familyapp-alice`.
-- `FAMILYAPP_ALICE_CLIENT_SECRET`: a random secret shared only with the Yandex console.
-- `FAMILYAPP_ALICE_COOKIE_SECRET`: a separate random signing secret, never shared with Yandex.
+- `FAMILYAPP_ALICE_CLIENT_ID` — выбранный идентификатор клиента,
+  например `familyapp-alice`.
+- `FAMILYAPP_ALICE_CLIENT_SECRET` — случайный секрет, общий только с консолью Яндекса.
+- `FAMILYAPP_ALICE_COOKIE_SECRET` — отдельный случайный секрет подписи,
+  который не передаётся Яндексу.
 
-Additionally set `FAMILYAPP_ALICE_SKILL_ID` after creating the skill to reject
-requests for other skills. This check supplements token authentication; a skill
-identifier alone never authorizes access. `FAMILYAPP_ALICE_TIMEZONE` defaults to
-`Europe/Moscow` and is the fallback for missing/invalid device timezones.
+После создания навыка дополнительно задайте `FAMILYAPP_ALICE_SKILL_ID`, чтобы
+отклонять запросы других навыков. Эта проверка дополняет аутентификацию токеном;
+сам по себе ID навыка не даёт доступа. `FAMILYAPP_ALICE_TIMEZONE` по умолчанию
+равен `Europe/Moscow` и используется, если часовой пояс устройства отсутствует
+или неверен.
 
-Generate each secret independently with `python -c "import secrets;
-print(secrets.token_urlsafe(48))"` in your own terminal. Do not paste secrets into
-repository files, issues, chat, or command arguments. Keep both secrets stable
-across backend restarts and use different values for development and production.
+Генерируйте каждый секрет независимо в своём терминале:
+`python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+Не вставляйте секреты в файлы репозитория, задачи, чат или аргументы команд.
+Оба секрета должны сохраняться при перезапусках сервера; используйте разные
+значения для разработки и рабочей среды.
 
-For Docker, create `/opt/familyapp/.alice.env` on the VDS, owned by root with mode
-0600, containing these environment variables. The Compose file loads it as an
-optional `env_file`; a missing file keeps Alice disabled and does not break
-ordinary app deployment. This needs [Docker Compose 2.24.0 or newer](https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/) for
-`required: false`. The release script replaces `.release.env`, so do not place
-Alice configuration there. Updating `.alice.env` requires recreating the backend
-container; a simple restart does not reload it.
+Для Docker создайте на VDS файл `/opt/familyapp/.alice.env` с этими переменными,
+владельцем root и правами 0600. Compose загружает его как необязательный
+`env_file`: отсутствие файла отключает Алису, не мешая обычному развёртыванию.
+Для `required: false` нужен
+[Docker Compose 2.24.0 или новее](https://docs.docker.com/compose/how-tos/environment-variables/set-environment-variables/).
+Скрипт релиза заменяет `.release.env`, поэтому настройки Алисы туда не помещайте.
+После изменения `.alice.env` нужно пересоздать контейнер сервера: обычный
+перезапуск не перечитывает переменные.
 
-Install the updated `compose.prod.yaml` on the server alongside the usual
-release. The SQLite tables are added automatically without changing existing
-account, restriction or chore records. The updated Caddy snippet routes
-`/integrations/alice/*` to the backend. Review and apply this change to the shared
-ingress before testing; otherwise the requests reach Flutter. No changes to the
-VPN or host port 443 are needed in the repository configuration.
+Установите обновлённый `compose.prod.yaml` вместе с обычным релизом. Таблицы SQLite
+добавляются автоматически без изменения существующих записей аккаунтов,
+ограничений и дел. Обновлённый фрагмент Caddy направляет `/integrations/alice/*`
+на сервер. Перед проверкой примените изменение к общей входной конфигурации,
+иначе запросы попадут во Flutter. Изменения VPN и порта 443 хоста не требуются.
 
-Verify that the Yandex console accepts the HTTPS origin with port 8443 and that
-it can reach the webhook. Live HTTPS access on the VDS is verified; access from
-the Yandex console remains to be tested. Use a publicly valid fullchain certificate. If Yandex rejects
-the port, decide on ingress changes separately before changing the shared VDS.
+Проверьте, что консоль Яндекса принимает HTTPS-адрес с портом 8443 и может
+обратиться к вебхуку. HTTPS-доступ к VDS проверен; доступ из консоли Яндекса
+в исходной записи ещё требовал проверки. Используйте общедоверенный сертификат
+с полной цепочкой. Если Яндекс отклонит порт, отдельно согласуйте изменения
+входной конфигурации, прежде чем менять общий VDS.
 
-Flask does not automatically load the supplied `backend/.env.example`; export
-environment variables in the launching process for local development. Consent
-cookies require HTTPS by default. HTTP preview explicitly overrides
-`ALICE_COOKIE_SECURE=False` in a local `create_app` configuration, never in
-production. Production does not require Flask's global `SECRET_KEY`: the Alice
-flow uses the separate signing key.
+Flask не загружает `backend/.env.example` автоматически: для локального запуска
+задайте переменные в запускающем процессе. Cookie согласия по умолчанию требуют
+HTTPS. Для локального HTTP-просмотра явно задаётся `ALICE_COOKIE_SECURE=False`
+в конфигурации `create_app`; в рабочей среде так делать нельзя.
+Общий `SECRET_KEY` Flask в рабочей среде не требуется: интеграция использует
+отдельный ключ подписи.
 
-## Family authorization and revocation
+## Разрешение доступа к семье и отзыв привязки
 
-1. Start the skill while signed in to the Yandex account used on the speaker.
-2. An unlinked request on a surface with `account_linking` returns
-   `start_account_linking` alone, with no `response` field.
-3. In the Yandex authorization flow, a parent signs in with their FamilyApp
-   credentials, chooses a family, and explicitly grants read access.
-4. Every speaker listener can query restrictions of that family. The integration
-   identifies the linked account, not the individual speaking.
-5. The selected family stays fixed even when the parent switches families in
-   the Flutter app.
+1. Запустите навык под аккаунтом Яндекса, используемым на колонке.
+2. Запрос без привязки на устройстве с `account_linking` получает только
+   `start_account_linking`, без поля `response`.
+3. В процессе авторизации родитель входит с учётными данными FamilyApp,
+   выбирает семью и явно разрешает запрошенный доступ.
+4. Любой, кто обращается к колонке, может запрашивать разрешённые данные этой
+   семьи. Интеграция определяет привязанный аккаунт, а не говорящего человека.
+5. Выбранная семья остаётся прежней, даже если родитель переключит семью
+   в приложении Flutter.
 
-To revoke a connection, open
-`https://famly-app.duckdns.org:8443/integrations/alice/manage`, sign in as the
-parent who created it, and press "Отключить доступ". Changing that parent's
-password, losing parent membership, or deleting their account also invalidates
-access and token refresh. App logout affects the app session only; use the
-management page to revoke Alice. Creating a new linking does not implicitly
-revoke older connections.
+Для отзыва откройте `https://famly-app.duckdns.org:8443/integrations/alice/manage`,
+войдите под родителем, создавшим привязку, и нажмите «Отключить доступ».
+Изменение пароля этого родителя, потеря родительской роли в семье или удаление
+аккаунта также прекращают доступ и обновление токенов. Выход из приложения
+завершает только сессию приложения; для отключения Алисы используйте страницу
+управления. Новая привязка не отзывает старые автоматически.
 
-Authorization codes last 5 minutes and can be consumed only once. Access tokens
-last one hour. Refresh tokens rotate and have an absolute 90-day lifetime from
-the original code exchange; then the parent reconnects. Previous access tokens
-remain usable until their one-hour expiry to tolerate in-flight requests during
-refresh. Revoking a grant invalidates all its access and refresh tokens at once.
-Only token/code hashes are stored in SQLite. App tokens cannot authenticate the
-Alice webhook, and Alice tokens cannot authenticate the regular app API.
+Код авторизации действует 5 минут и используется один раз. Токен доступа
+действует один час. Токены обновления заменяются при использовании, а их общий
+срок ограничен 90 днями от первого обмена кода; затем нужно переподключиться.
+Предыдущие токены доступа сохраняют действие до истечения своего часа,
+чтобы запросы в процессе обновления не ломались. Отзыв привязки немедленно
+делает недействительными все её токены доступа и обновления.
+В SQLite хранятся только хеши токенов и кодов. Токены приложения не подходят
+для вебхука Алисы, а токены Алисы — для обычного API приложения.
 
-Login is protected by signed 10-minute HttpOnly, SameSite=Lax cookies, CSRF
-tokens, and persistent per-address/per-login limits (10 attempts per minute).
-Token requests are limited to 120 per minute per address. Reverse proxies may
-cause several users to share the address limit; untrusted `X-Forwarded-For` is
-deliberately not used. Authorization/token responses are not cached and have no
-CORS access. Avoid enabling request-body, Authorization-header, or OAuth
-callback-query logging on the VDS or in observability tools.
+Вход защищён подписанными cookie на 10 минут с HttpOnly и SameSite=Lax,
+CSRF-токенами и сохраняемыми ограничениями по адресу и логину — 10 попыток
+в минуту. Получение токенов ограничено 120 запросами в минуту с адреса.
+За обратным прокси несколько пользователей могут делить один лимит по адресу;
+недоверенный `X-Forwarded-For` намеренно не используется. Ответы авторизации
+и выдачи токенов не кешируются и не открыты через CORS. Не включайте на VDS
+или в средствах наблюдения запись полных тел запросов, заголовков Authorization
+и параметров OAuth-перенаправлений.
 
-## Supported conversations
+## Поддерживаемые вопросы об ограничениях
 
-- "Какие сегодня ограничения у ребят?"
-- "Что детям сегодня нельзя?"
-- "Какие ограничения у Миши?"
-- "Что сегодня нельзя Михаилу?"
-- "Можно Мише сегодня мультики посмотреть?"
-- "Миша сегодня может смотреть мультфильмы?"
-- "Когда Мише снова можно мультики?"
-- "До какого дня Мише нельзя смотреть мультфильмы?"
-- Follow-ups: "А завтра?", "А у Маши?", "Повтори".
-- "Помощь", "Что ты умеешь?", "Выход".
+- «Какие сегодня ограничения у ребят?»
+- «Что детям сегодня нельзя?»
+- «Какие ограничения у Миши?»
+- «Что сегодня нельзя Михаилу?»
+- «Можно Мише сегодня мультики посмотреть?»
+- «Миша сегодня может смотреть мультфильмы?»
+- «Когда Мише снова можно мультики?»
+- «До какого дня Мише нельзя смотреть мультфильмы?»
+- «Помощь», «Что ты умеешь?», «Выход».
 
-The adapter supports today, tomorrow, the day after tomorrow, yesterday, and
-an explicit `YYYY-MM-DD` date. Other date phrases ask for clarification.
-The current date uses `meta.timezone` (IANA), falling back to the configured
-timezone. Restrictions have inclusive end dates. For permission questions the
-backend merges overlapping/adjacent intervals of the requested activity before
-announcing the next unrestricted date. Cancelled restrictions never count;
-historical queries use the stored status and queried dates rather than the
-server's current effective status.
+Адаптер понимает сегодня, завтра, послезавтра, вчера и точную дату `YYYY-MM-DD`.
+Для других формулировок даты предлагается уточнение. Текущая дата определяется
+по `meta.timezone` в формате IANA, а при необходимости — по настроенному
+резервному часовому поясу. Последний день ограничения включается в его период.
+При вопросах о доступности занятия сервер объединяет соседние и пересекающиеся
+периоды, прежде чем назвать следующую дату без ограничения. Отменённые
+ограничения не учитываются. Для вопросов о прошлом используются сохранённый
+статус и запрошенная дата, а не эффективный статус на сегодняшний день.
 
-Common Russian name variants are supported, including Михаил/Миша,
-Мария/Маша, Анна/Аня and Александр/Саша. Matching is limited to children of the
-linked family. Ambiguous forms (e.g. Саша for two children) ask for clarification.
-Name dictionaries are intentionally finite: uncommon nicknames may require the
-name recorded in the app, and custom nicknames are not configurable yet.
+Поддерживаются распространённые варианты имён: Михаил/Миша, Мария/Маша,
+Анна/Аня, Александр/Саша. Поиск ограничен детьми подключённой семьи.
+Неоднозначная форма, например Саша для двух детей, требует уточнения.
+Словарь вариантов конечен: для редких домашних имён может потребоваться имя
+из приложения. Настраиваемых пользователем вариантов пока нет.
 
-Activity synonyms cover cartoons, phones, tablets, games, TV and computers.
-They match the corresponding words in restriction type names. Other type names
-can be requested by their normalized exact label, including one-off types found
-in the family's restriction history. For a custom type with an unrelated name,
-use that name; the backend cannot infer that, for example, "Видео" means
-"Мультфильмы". Arbitrary semantic paraphrases, weekday dates and interpreting
-the free-text reason as a rule are not supported.
+Синонимы занятий охватывают мультики, телефоны, планшеты, игры, телевизор
+и компьютеры. Они сопоставляются со словами в названиях типов ограничений.
+Другие типы можно запросить по точному нормализованному названию, включая
+разовые типы из истории семьи. Для собственного типа с несвязанным названием
+используйте именно его: сервер не выводит, что «Видео» означает «Мультфильмы».
+Произвольные смысловые перефразирования, даты по дням недели и трактовка
+свободного текста причины как правила не поддерживаются.
 
-An absent restriction is phrased as "В FamilyApp ... нет ограничения", not as a
-new parental permission. Queries never read the reason or audit history aloud.
-Long summaries stop before 1800 characters and direct the listener to the app
-for the rest. Completed restriction answers return `end_session: true`, including
-empty and truncated summaries. Clarification questions keep the session open;
-name/activity replies can finish the query before the skill exits.
-Follow-up context is signed, bound to the OAuth grant, expires
-after 30 minutes, and is returned via `session_state`. Forged context is ignored.
-After account linking the skill reads today's summary; it does not restore the
-exact pre-linking question in this version.
+Отсутствие ограничения формулируется как «В FamilyApp ... нет ограничения»,
+а не как новое разрешение родителя. Причина и история изменений не зачитываются.
+Сводки ограничиваются длиной ответа до 1024 символов; за остальным Алиса
+направляет в приложение. Все голосовые ответы возвращают `end_session: true`,
+включая пустые сводки, сокращённые ответы и просьбы уточнить.
+В ранней версии были реплики продолжения «А завтра?», «А у Маши?», «Повтори».
+В текущей версии после выхода нужно заново обратиться к навыку с полным вопросом.
+Подписанный контекст привязан к разрешению OAuth, истекает через 30 минут
+и передаётся в `session_state`; поддельный контекст игнорируется.
+После привязки навык читает сегодняшнюю сводку, а не восстанавливает исходный
+вопрос, заданный до привязки.
 
-## Verification
+## История проверок
 
-### Shopping voice extension (release 0.4.0)
+### Голосовые покупки — релиз 0.4.0
 
-Release 0.4.0 was deployed on 2026-10-08 through the existing release workflow.
-The isolated release passed 108 backend tests. Both production containers are
-healthy and report version 0.4.0. Live HTTPS authorization accepts the combined
-scope and each individual shopping scope; unknown scopes are rejected. The
-shopping API requires authentication. Real account linking and shopping voice
-commands should now be verified by the owner after reconnecting the account.
+Релиз 0.4.0 развёрнут 08.10.2026 через существующий процесс выпуска.
+Изолированный релиз прошёл 108 серверных тестов. На момент проверки оба
+рабочих контейнера были исправны и сообщали версию 0.4.0. Проверка авторизации
+по HTTPS принимала объединённый набор разрешений и каждое разрешение покупок
+отдельно; неизвестные разрешения отклонялись. API покупок требовал
+аутентификацию. Реальную привязку и голосовые покупки оставалось проверить
+владельцу после переподключения аккаунта.
 
-The activation phrases "Алиса, скажи семейному помощнику купить хлеб" and
-"Алиса, спроси у семейного помощника что нужно купить" are handled on the
-backend as `request.command` values `купить хлеб` and `что нужно купить`.
-Yandex handles skill activation; speaker recognition still needs a live check.
-Short `купи хлеб` / `купить хлеб` commands add an item rather than mark it bought.
+Фразы активации «Алиса, скажи семейному помощнику купить хлеб» и
+«Алиса, спроси у семейного помощника что нужно купить» поступают на сервер
+в `request.command` как `купить хлеб` и `что нужно купить`.
+Активацией занимается Яндекс; распознавание на колонке требует живой проверки.
+Короткие команды `купи хлеб` / `купить хлеб` добавляют товар, а не отмечают покупку.
 
-The shared family shopping list can be read and one item can be added per
-command. Supported examples: "Что нужно купить?", "Прочитай список покупок",
-"Добавь в список покупок молоко", and "Запиши хлеб в список покупок".
-An add command without a name asks for one item and accepts the next reply.
-Completed reads and additions return `end_session: true`. Empty lists have a
-short explicit response; long lists are bounded and refer to the app.
+Доступны чтение общего семейного списка и добавление одного товара за команду.
+Примеры: «Что нужно купить?», «Прочитай список покупок»,
+«Добавь в список покупок молоко», «Запиши хлеб в список покупок».
+В релизе 0.4.0 команда без названия товара запрашивала его следующей репликой;
+текущая версия просит повторить полную команду и выходит из навыка.
+Завершённые чтения и добавления возвращают `end_session: true`.
+Для пустого списка есть короткий явный ответ, длинные списки сокращаются
+с направлением в приложение.
 
-The extension uses the existing shopping domain. Voice additions use default
-urgency and category and do not escalate urgency on duplicates. Audit member
-IDs refer to the parent who linked the family, not the unidentified speaker.
-Purchases, removal, urgency filtering and category filtering are not supported.
+Используется существующая бизнес-логика покупок. Добавления голосом получают
+срочность и категорию по умолчанию; повтор не повышает срочность.
+В истории действий указан родитель, привязавший семью, а не неизвестный
+говорящий. Отметка покупки, удаление и фильтрация по срочности или категории
+голосом не поддерживаются.
 
-After deploying this extension, set the console action group identifier to
-`restrictions:read&shopping:read&shopping:write`, save/publish the updated skill,
-and reconnect the parent account. Each permission is checked separately.
-Existing grants are migrated with `restrictions:read` only; refreshing a token
-cannot upgrade permissions. The consent page explicitly describes reading and
-adding shopping items for everyone who can speak to the device.
+Для этого расширения в консоли задавался идентификатор группы действий
+`restrictions:read&shopping:read&shopping:write`, затем навык сохранялся
+и публиковался, а аккаунт родителя подключался заново. Для текущей волны
+используйте полный набор из начала документа. Каждое разрешение проверяется
+отдельно. Старые привязки мигрируют только с `restrictions:read`; обновление
+токена не расширяет права. Страница согласия явно объясняет доступ к чтению
+и добавлению покупок для всех, кто может обратиться к устройству.
 
-### Production deployment, 2026-10-08
+### Развёртывание на рабочем сервере — 08.10.2026
 
-Release `0.3.0` is deployed. The Alice environment file is loaded by the backend,
-and Caddy routes `/integrations/alice/*` to it. The configured skill ID is
+На этом этапе был развёрнут релиз `0.3.0`. Сервер загружал файл окружения Алисы,
+Caddy направлял `/integrations/alice/*` на сервер. Настроенный ID навыка:
 `068d075d-322a-4973-bf62-da2ddadee964`.
 
-Live HTTPS checks passed for health, the account management and authorization
-pages, an unlinked webhook requesting account linking, and rejection of a wrong
-skill ID. Backend and web containers report version `0.3.0` and are healthy.
-No private family data was accessed. Real Yandex account linking and speaker
-verification remain to be performed by the project owner.
+Живые проверки HTTPS прошли для состояния сервера, страниц управления
+и авторизации, запроса вебхука без привязки и отклонения чужого ID навыка.
+Оба контейнера сообщали версию `0.3.0` и были исправны. Приватные семейные данные
+не запрашивались. Реальную привязку Яндекса и проверку на колонке должен был
+выполнить владелец проекта.
 
-Run from `backend/`: `poetry run pytest`.
+Запуск тестов из `backend/`: `poetry run pytest`.
 
-Tests cover OAuth consent, exact redirect validation, client authentication,
-CSRF, login limits, one-use codes, refresh rotation, expiry, revocation,
-password changes, parent-only linking, family isolation, family switching,
-read-only behavior, inclusive/contiguous periods, cancellation, aliases,
-unknown names, clarification, follow-ups, invalid context, and bounded replies.
+Тесты покрывают согласие OAuth, точное совпадение адреса перенаправления,
+аутентификацию клиента, CSRF, лимиты входа, одноразовые коды, замену токенов
+обновления, истечение сроков, отзыв, смену пароля, привязку только родителем,
+изоляцию и переключение семей, запрет голосового изменения ограничений,
+включительность и смежность периодов, отмену, варианты и неизвестные имена,
+уточнения, совместимость контекста и ограничение длины ответа.
 
-For the console/speaker test, prepare real restrictions in the app, then check:
+Для проверки в консоли и на колонке подготовьте ограничения в приложении:
 
-1. First launch and account linking, including a speaker without a screen.
-2. Today's summary, no restrictions, and a restriction whose last day is today.
-3. A child name, a permission question, and "А завтра?".
-4. A changed/cancelled restriction is reflected immediately without redeployment.
-5. Unknown/ambiguous names, unsupported phrases, and an attempted cancellation.
-6. Revocation and subsequent request for re-linking.
-7. Activation-name recognition and end-to-end response time under 4.5 seconds.
+1. Первый запуск и привязка аккаунта, в том числе на колонке без экрана.
+2. Сегодняшняя сводка, отсутствие ограничений, последний день ограничения.
+3. Имя ребёнка, вопрос о разрешённости занятия, полный повторный вопрос на завтра.
+4. Изменённое или отменённое ограничение отражается сразу без развёртывания.
+5. Неизвестные и неоднозначные имена, неподдерживаемые фразы, попытка отмены.
+6. Отзыв доступа и последующее предложение переподключиться.
+7. Распознавание названия активации и полный ответ менее чем за 4,5 секунды.
 
-Official references, checked 2026-10-07:
+Официальные источники, проверенные 07.10.2026:
 
-- [Request format](https://yandex.ru/dev/dialogs/alice/doc/ru/request)
-- [Response format and timeout](https://yandex.ru/dev/dialogs/alice/doc/ru/response)
-- [Authorization server](https://yandex.ru/dev/dialogs/alice/doc/ru/auth/create-server)
-- [Authorization responses/events](https://yandex.ru/dev/dialogs/alice/doc/ru/auth/make-skill)
-- [Account-linking console settings](https://yandex.ru/dev/dialogs/alice/doc/ru/auth/add-skill-to-console)
-- [Testing](https://yandex.ru/dev/dialogs/alice/doc/ru/test)
+- [Формат запроса](https://yandex.ru/dev/dialogs/alice/doc/ru/request)
+- [Формат ответа и время ожидания](https://yandex.ru/dev/dialogs/alice/doc/ru/response)
+- [Сервер авторизации](https://yandex.ru/dev/dialogs/alice/doc/ru/auth/create-server)
+- [Ответы и события авторизации](https://yandex.ru/dev/dialogs/alice/doc/ru/auth/make-skill)
+- [Привязка аккаунта в консоли](https://yandex.ru/dev/dialogs/alice/doc/ru/auth/add-skill-to-console)
+- [Тестирование](https://yandex.ru/dev/dialogs/alice/doc/ru/test)

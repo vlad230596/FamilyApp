@@ -69,6 +69,17 @@ class _DutiesPageState extends ConsumerState<DutiesPage> {
                   ),
                 ),
               for (final item in items) _occurrenceCard(item, state, parent),
+              ExpansionTile(
+                title: const Text('Штрафные дежурства — отдельный учёт'),
+                subtitle: const Text('Не влияют на общий баланс и оценки'),
+                children: [
+                  for (final item
+                      in state
+                          .rows('occurrences')
+                          .where((o) => o['kind'] == 'penalty'))
+                    _occurrenceCard(item, state, parent),
+                ],
+              ),
               if (parent && pending.isNotEmpty) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -188,12 +199,16 @@ class _DutiesPageState extends ConsumerState<DutiesPage> {
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             Text(
-                              '${duty['active'] == true ? 'Активно' : 'Приостановлено'} · ${duty['reminder_time']} · ${duty['timezone']}',
+                              '${duty['kind'] == 'penalty'
+                                  ? 'Штрафное · один раз'
+                                  : duty['active'] == true
+                                  ? 'Активно'
+                                  : 'Приостановлено'} · ${duty['reminder_time']} · ${duty['timezone']}',
                             ),
                             Text(
                               'Текущая версия с ${formatDate(DateTime.parse(duty['effective_date']))}',
                             ),
-                            if (parent)
+                            if (parent && duty['schedule'] != 'once')
                               TextButton.icon(
                                 onPressed: state.busy
                                     ? null
@@ -241,6 +256,8 @@ class _DutiesPageState extends ConsumerState<DutiesPage> {
               '${formatDate(DateTime.parse(item['occurrence_date']))} · ${item['assigned_name'] ?? 'Без назначения'}',
             ),
             Text(status),
+            if (item['kind'] == 'penalty')
+              const Text('Штрафное · вне общего зачёта'),
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               title: const Text('Кто выполнил и оценка'),
@@ -253,6 +270,8 @@ class _DutiesPageState extends ConsumerState<DutiesPage> {
                   Text(
                     'Оценка: ${ratingLabels[item['rating']]} · Подтвердил: ${item['confirmed_by_name']}',
                   ),
+                if (item['rating'] == null && item['confirmed_by_name'] != null)
+                  Text('Подтвердил: ${item['confirmed_by_name']}'),
               ],
             ),
             Wrap(

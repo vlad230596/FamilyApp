@@ -1,4 +1,4 @@
-"""Recurring checks, their schedules and immutable answers."""
+"""Recurring checks and personal one-time tasks with immutable answers."""
 from __future__ import annotations
 
 import json
@@ -52,6 +52,8 @@ def init_chores() -> None:
         );
         CREATE INDEX IF NOT EXISTS chores_family ON chores(family_id);
     """)
+    if "schedule" not in {row["name"] for row in get_db().execute("PRAGMA table_info(chores)")}:
+        get_db().execute("ALTER TABLE chores ADD COLUMN schedule TEXT NOT NULL DEFAULT 'recurring'")
     get_db().commit()
 
 
@@ -92,14 +94,19 @@ def validate_schedule(payload: dict) -> dict:
     active = payload.get("active", True)
     if type(active) is not bool:
         raise DomainError("active must be a boolean")
+    schedule = payload.get("schedule", "recurring")
+    if schedule not in ("recurring", "once"):
+        raise DomainError("invalid chore schedule")
     return dict(title=title.strip(), responsible_member_id=member_id,
                 start_date=start.isoformat(), interval_days=interval,
                 weekdays=json.dumps(sorted(set(weekdays))), reminder_time=clock,
-                timezone=zone, active=int(active))
+                timezone=zone, active=int(active), schedule=schedule)
 
 
 def scheduled_on(chore: dict, day: date) -> bool:
     start = date.fromisoformat(chore["start_date"])
+    if chore.get("schedule") == "once":
+        return day == start
     if day < start:
         return False
     weekdays = chore["weekdays"]
@@ -138,6 +145,10 @@ def serialize(chore: dict) -> dict:
         due -= timedelta(days=1)
     else:
         due = None
+    if chore.get("schedule") == "once":
+        # Personal tasks remain actionable before the reminder and after overdue.
+        start = date.fromisoformat(chore["start_date"])
+        due = start if start <= today else None
     result["due_date"] = due.isoformat() if due is not None and chore["active"] else None
     result["due_answer"] = None
     if result["due_date"]:
@@ -153,6 +164,8 @@ def serialize(chore: dict) -> dict:
                 result["next_at"] = scheduled_at(chore, next_day).isoformat()
                 break
             next_day += timedelta(days=1)
+    if chore.get("schedule") == "once" and result["due_answer"] is not None:
+        result["next_at"] = None
     return result
 
 
@@ -200,7 +213,9 @@ def answer_chore(chore_id: int, payload: dict) -> dict:
             raise PermissionDenied("only responsible member may answer")
         if type(payload.get("revision")) is not int or payload["revision"] != chore["revision"]:
             raise DomainError("chore changed; refresh before answering")
-        if not chore["active"] or not scheduled_on(chore, day) or scheduled_at(chore, day) > utc_now():
+        if (not chore["active"] or not scheduled_on(chore, day)
+                or (chore.get("schedule") != "once" and scheduled_at(chore, day) > utc_now())
+                or day > utc_now().astimezone(ZoneInfo(chore["timezone"])).date()):
             raise DomainError("check is not due")
         existing = db.execute("SELECT * FROM chore_answers WHERE chore_id = ? AND occurrence_date = ?",
                               (chore_id, day.isoformat())).fetchone()
@@ -243,6 +258,7 @@ def reminders() -> list[dict]:
                                         (chore["id"], day.isoformat())).fetchone()
             if not answered:
                 result.append(dict(chore_id=chore["id"], title=chore["title"],
+                    schedule=chore.get("schedule", "recurring"),
                     occurrence_date=day.isoformat(), scheduled_at=scheduled_at(chore, day).isoformat(),
                     timezone=chore["timezone"], revision=chore["revision"],
                     family_id=family_id(), member_id=g.member.id))

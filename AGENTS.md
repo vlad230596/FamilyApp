@@ -33,6 +33,29 @@ are English.
 - After changes, run relevant checks and, when applicable, start the app so it can
   be tested locally.
 
+## Релизы: номер версии
+
+Номер следующего релиза **не выбирается руками** — его считает workflow
+`Create FamilyApp release` (`.github/workflows/create-release.yml`) по тегам
+на `origin`. Он же создаёт тег и GitHub Release и запускает `release.yml`
+(образы и деплой) и `apk-release.yml` (APK).
+
+- Запуск: `gh workflow run create-release.yml --ref main -f bump=minor`
+  (`patch` — только исправления; `minor` — новые возможности, по умолчанию;
+  `major` — несовместимые изменения API или данных).
+- Тег и релиз вручную (`gh release create X.Y.Z`, `git tag`) не создавать.
+- Поле `version` не передавать. Оно для редких случаев, когда владелец сам
+  назвал точный номер; workflow всё равно откажет, если номер не новее
+  последнего тега.
+- Какой номер получился — в логе шага `Validate release input` и в summary
+  запуска («Releasing X.Y.Z (latest was …)»). Его и называть владельцу.
+- Текущую версию узнавать только с удалённого репозитория:
+  `git ls-remote --tags --refs origin` или `gh release list`. **Локальным
+  `git tag` не верить**: теги создаёт CI, и в локальной копии их может не быть.
+- `release.yml` и `apk-release.yml` собирают **уже существующий** тег. Ручной
+  запуск (`-f tag=X.Y.Z`) нужен только для повтора; тег брать из summary
+  `create-release.yml` или с `origin`, не придумывать.
+
 ## Repository Structure
 
 Use this structure unless the project owner decides otherwise:

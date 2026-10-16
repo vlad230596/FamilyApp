@@ -246,7 +246,7 @@ class _HouseholdActionDialogState extends ConsumerState<HouseholdActionDialog> {
                           v == null ? 'Выберите исполнителя' : null,
                     ),
                     const SizedBox(height: 16),
-                    _ratingField(),
+                    if (widget.item?['kind'] != 'penalty') _ratingField(),
                   ],
                   if (widget.action == HouseholdAction.complete && !parent)
                     const Text(
@@ -267,7 +267,8 @@ class _HouseholdActionDialogState extends ConsumerState<HouseholdActionDialog> {
                           ? null
                           : (v) => setState(() => _approved = v),
                     ),
-                    if (_approved) _ratingField(),
+                    if (_approved && widget.item?['kind'] != 'penalty')
+                      _ratingField(),
                   ],
                   if (widget.action == HouseholdAction.away) ...[
                     const Text(

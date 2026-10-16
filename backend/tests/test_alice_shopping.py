@@ -32,7 +32,7 @@ def test_short_activation_commands_add_and_read(alice_client, command):
 def test_short_buy_requires_name_and_write_permission(alice_client):
     access = token(alice_client)["access_token"]
     ask = voice(alice_client, access, "купить")
-    assert ask["response"]["end_session"] is False
+    assert ask["response"]["end_session"] is True
     added = voice(alice_client, access, "Хлеб", state=ask["session_state"])
     assert added["response"]["end_session"] is True
     read_only = token(alice_client, "shopping:read")["access_token"]
@@ -100,7 +100,7 @@ def test_read_permission_cannot_add_and_write_cannot_read(alice_client):
 def test_clarification_limits_and_unsupported_purchase(alice_client):
     access = token(alice_client)["access_token"]
     ask = voice(alice_client, access, "добавь в список покупок")
-    assert ask["response"]["end_session"] is False
+    assert ask["response"]["end_session"] is True
     cancel = voice(alice_client, access, "не надо", state=ask["session_state"])
     assert cancel["response"]["end_session"] is True
     assert items(alice_client) == []
@@ -150,3 +150,33 @@ def test_long_list_is_bounded_and_does_not_read_purchase_history(alice_client):
     reply = voice(alice_client, access, "что в списке покупок")
     assert len(reply["response"]["text"]) < 1800
     assert "Остальные товары" in reply["response"]["text"]
+
+
+def test_voice_inflections_share_one_item_and_keep_original_journal(alice_client):
+    access = token(alice_client)["access_token"]
+    response = voice(alice_client, access, "купить овощей")
+    assert "овощи" in response["response"]["text"]
+    assert items(alice_client)[0]["name"] == "овощи"
+    original = items(alice_client)[0]
+    voice(alice_client, access, "добавь в список овощи")
+    assert items(alice_client) == [original]
+    with alice_client.application.app_context():
+        row = get_db().execute("SELECT * FROM alice_journal WHERE command = ?", ("купить овощей",)).fetchone()
+        assert row["command"] == "купить овощей"
+        assert "овощи" in row["response_text"]
+
+
+def test_voice_normalization_reuses_manual_product_without_changing_metadata(alice_client):
+    access = token(alice_client)["access_token"]
+    alice_client.post("/api/shopping", json={"name": "Морковь", "urgency": "background", "category": "Овощи"})
+    original = items(alice_client)[0]
+    voice(alice_client, access, "купить моркови")
+    assert items(alice_client) == [original]
+
+
+def test_voice_preserves_brands_quantities_and_compounds(alice_client):
+    access = token(alice_client)["access_token"]
+    names = ["средство для посуды", "2 пачки молока", "Фейри", "Молоко 3,2%"]
+    for name in names:
+        voice(alice_client, access, "купить " + name)
+    assert {item["name"] for item in items(alice_client)} == set(names)

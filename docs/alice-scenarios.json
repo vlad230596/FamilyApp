@@ -1,0 +1,23 @@
+[
+  {"id":"help-launch","command":"","contains":["Можно спросить","дежур"],"outcome":"help"},
+  {"id":"help-short","command":"помощь","contains":["купить","подтвердить"],"outcome":"help"},
+  {"id":"help-reference","command":"справка","contains":["ограничения","дежур"],"outcome":"help"},
+  {"id":"help-capabilities","command":"что ты умеешь","contains":["купить","дежур"],"outcome":"help"},
+  {"id":"help-can","command":"что ты можешь","contains":["Можно спросить"],"outcome":"help"},
+  {"id":"help-commands","command":"какие команды ты поддерживаешь","contains":["Можно спросить"],"outcome":"help"},
+  {"id":"help-list","command":"команды","contains":["Можно спросить"],"outcome":"help"},
+  {"id":"exit","command":"выход","contains":["До встречи"],"outcome":"handled"},
+  {"id":"unknown","command":"абракадабра","contains":["Не распознала"],"outcome":"unrecognized"},
+  {"id":"restriction-empty","command":"какие сегодня ограничения у ребят","contains":["ограничений в FamilyApp нет"],"outcome":"handled"},
+  {"id":"restriction-needs-child","command":"можно мультики","contains":["Про какого ребёнка"],"outcome":"needs_rephrase"},
+  {"id":"shopping-empty","command":"что нужно купить","contains":["Список покупок пуст"],"outcome":"handled"},
+  {"id":"shopping-needs-name","command":"купить","contains":["новой команде"],"outcome":"needs_rephrase"},
+  {"id":"shopping-add","command":"добавь в список покупок молоко","contains":["молоко"],"outcome":"handled"},
+  {"id":"shopping-read","command":"прочитай список покупок","contains":["молоко"],"outcome":"handled"},
+  {"id":"duty-empty","command":"кто сегодня дежурит","contains":["дежурств нет"],"outcome":"handled"},
+  {"id":"duty-needs-performer","command":"я выполнил дежурство помыть посуду","contains":["именем исполнителя"],"outcome":"needs_rephrase"},
+  {"id":"shopping-normalize-vegetables","command":"купить овощей","contains":["овощи"],"outcome":"handled"},
+  {"id":"shopping-normalize-vegetables-repeat","command":"добавь в список овощи","contains":["овощи"],"outcome":"handled"},
+  {"id":"shopping-normalize-carrot","command":"купить моркови","contains":["морковь"],"outcome":"handled"},
+  {"id":"shopping-preserve-compound","command":"купить средство для посуды","contains":["средство для посуды"],"outcome":"handled"}
+]

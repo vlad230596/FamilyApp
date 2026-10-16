@@ -56,6 +56,12 @@
       <p class="notice">Все, кто разговаривает с колонкой, смогут добавлять товары в список покупок. Голос не определяет, кто говорит; действие выполняется через эту привязку.</p>
       {% endif %}
       <button type="submit" name="action" value="allow">Разрешить доступ</button>
+      {% if 'duties:read' in flow.get('scope', '') %}
+      <p class="notice">Все, кто разговаривает с колонкой, смогут узнавать дежурства этой семьи.</p>
+      {% endif %}
+      {% if 'duties:write' in flow.get('scope', '') %}
+      <p class="notice">Голосовые отметки выполнения отправляются родителю на подтверждение. Алиса не определяет говорящего и не выставляет оценки.</p>
+      {% endif %}
       <button class="secondary" type="submit" name="action" value="deny">Отмена</button>
     </form>
     <p>Отключить доступ можно на странице <a href="/integrations/alice/manage">«Доступ Алисы»</a>.</p>

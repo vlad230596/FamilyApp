@@ -251,7 +251,7 @@ def test_followups_unknown_names_context_and_dates(alice_client, monkeypatch):
     unsupported = voice(alice_client, tokens["access_token"], "ограничения в пятницу")
     assert "Уточните один день" in unsupported["response"]["text"]
     tampered = voice(alice_client, tokens["access_token"], "а завтра", {"context": "forged"})
-    assert "пока отвечаю" in tampered["response"]["text"]
+    assert "Не распознала" in tampered["response"]["text"]
     ask = voice(alice_client, tokens["access_token"], "можно сегодня мультики")
     assert "Про какого" in ask["response"]["text"]
     clarified = voice(alice_client, tokens["access_token"], "Миша", ask["session_state"])
@@ -311,12 +311,12 @@ def test_completed_restriction_answers_end_session(alice_client, monkeypatch, ph
     assert "ограничени" in result["response"]["text"].casefold()
 
 
-def test_restriction_clarification_keeps_session_open(alice_client, monkeypatch):
+def test_restriction_clarification_also_exits(alice_client, monkeypatch):
     fixed_day(monkeypatch)
     restriction(alice_client)
     access = linked_token(alice_client)["access_token"]
     ask = voice(alice_client, access, "можно сегодня мультики")
-    assert ask["response"]["end_session"] is False
+    assert ask["response"]["end_session"] is True
     answer = voice(alice_client, access, "Миша", state=ask["session_state"])
     assert answer["response"]["end_session"] is True
     assert "Михаил" in answer["response"]["text"]
@@ -369,7 +369,7 @@ def test_clarification_custom_topic_and_signed_context_bound_to_grant(alice_clie
     assert "Сладкое" in clarified["response"]["text"]
     other = linked_token(alice_client)
     denied_context = voice(alice_client, other["access_token"], "а завтра", clarified["session_state"])
-    assert "пока отвечаю" in denied_context["response"]["text"]
+    assert "Не распознала" in denied_context["response"]["text"]
     all_children = voice(alice_client, tokens["access_token"], "а у всех", clarified["session_state"])
     assert "Ограничения на" in all_children["response"]["text"]
 

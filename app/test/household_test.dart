@@ -50,6 +50,7 @@ void main() {
     await tester.tap(find.text('Покупки').last);
     await tester.pumpAndSettle();
     expect(find.text('Главный семейный список'), findsOneWidget);
+    await tester.ensureVisible(find.byType(DropdownButtonFormField<int>));
     await tester.tap(find.byType(DropdownButtonFormField<int>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Дача').last);
@@ -124,6 +125,36 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('parent assigns a penalty once to a specific member', (
+    tester,
+  ) async {
+    final api = HouseholdApi();
+    await open(tester, api, const Size(320, 640));
+    await tester.tap(find.text('Дела').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Дежурства'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Штрафное дежурство'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Что нужно сделать'),
+      'Убрать кухню',
+    );
+    await tester.ensureVisible(find.byType(DropdownButtonFormField<int>));
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(api.member.name).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+    expect(api.savedDuty?['kind'], 'penalty');
+    expect(api.savedDuty?['schedule'], 'once');
+    expect(api.savedDuty?['assigned_member_id'], api.member.id);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('child can add shopping and submit own duty without management', (
     tester,

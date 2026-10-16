@@ -10,7 +10,11 @@ from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from .persistence import list_children, list_restrictions
 
-HELP = "Можно спросить: что нужно купить, какие сегодня ограничения у ребят, или сказать: добавь в список покупок молоко."
+HELP = ("Можно спросить: какие сегодня ограничения у ребят; когда Мише можно мультики; "
+        "что нужно купить; кто сегодня дежурит. Можно сказать: добавь в список покупок молоко; "
+        "Миша выполнил дежурство помыть посуду. Голосовую отметку должен подтвердить родитель в приложении. "
+        "Ограничения, назначения и оценки меняются в приложении. После ответа я выхожу из навыка; "
+        "для следующей команды обратитесь к семейному помощнику снова.")
 NAME_GROUPS = (
     ("михаил", "миша", "мишенька"), ("мария", "маша", "машенька"),
     ("александр", "саша", "саня"), ("александра", "саша"),
@@ -71,8 +75,14 @@ def clean_label(text):
     return re.sub(r"[\x00-\x1f<>\[\]{}]", "", text or "ограничение")[:80].strip()
 
 
-def spoken_response(text, end=False, context=None):
-    result = {"version": "1.0", "response": {"text": text, "end_session": end}}
+def spoken_response(text, end=True, context=None, outcome=None):
+    # Every spoken response is one-shot, including help and incomplete commands.
+    g.alice_outcome = outcome or getattr(g, "alice_outcome", "handled")
+    if g.alice_outcome == "needs_rephrase" and "новой команде" not in text:
+        text += " Повторите вопрос целиком, снова обратившись к семейному помощнику."
+    if len(text) > 1024:
+        text = text[:950].rsplit(" ", 1)[0] + ". Остальное — в приложении FamilyApp."
+    result = {"version": "1.0", "response": {"text": text, "end_session": True}}
     if context is not None:
         context = {**context, "grant_id": g.alice_grant_id}
         result["session_state"] = {"context": state_serializer().dumps(context)}
@@ -142,6 +152,7 @@ def next_free_day(restrictions, day):
 
 
 def answer(payload):
+    g.alice_outcome = "needs_rephrase"
     utterance = payload.get("request", {})
     if not isinstance(utterance, dict) or not isinstance(utterance.get("command", ""), str):
         return spoken_response("Не удалось разобрать вопрос. " + HELP)
@@ -150,23 +161,27 @@ def answer(payload):
     if "account_linking_complete_event" in payload:
         text = "какие сегодня ограничения у ребят"
     if text in {"хватит", "стоп", "выход", "закрой навык", "до свидания"}:
-        return spoken_response("До встречи!", end=True)
+        return spoken_response("До встречи!", outcome="handled")
+    if not text or text in {"помощь", "помоги", "что ты умеешь", "что ты можешь", "расскажи что ты умеешь", "справка", "команды", "покажи команды", "какие команды ты знаешь", "какие команды ты поддерживаешь"}:
+        return spoken_response("Это семейный помощник. " + HELP, outcome="help")
+    from .alice_duties import answer_duties
+    duty_response = answer_duties(utterance.get("command", "")[:2048], payload, spoken_response, clean_label)
+    if duty_response is not None:
+        return duty_response
     from .alice_shopping import answer_shopping
     shopping_response = answer_shopping(utterance.get("command", "")[:2048], previous, spoken_response, clean_label)
     if shopping_response is not None:
         return shopping_response
-    if not text or text in {"помощь", "что ты умеешь", "что ты можешь"}:
-        return spoken_response("Это семейный помощник. " + HELP)
     words = set(text.split())
     if any(word.startswith(("отмен", "сним", "продл", "добав", "разреш", "запрет", "измени", "убери")) for word in words):
-        return spoken_response("Изменять ограничения можно только в приложении FamilyApp. Я могу рассказать, какие ограничения действуют.")
+        return spoken_response("Изменять ограничения можно только в приложении FamilyApp. Я могу рассказать, какие ограничения действуют.", outcome="unsupported")
     recognized = any(w.startswith(("огранич", "нельзя", "можно", "может", "мультик", "мультфильм")) for w in words)
     followup = bool(previous) and (previous.get("pending") or text.startswith("а ") or text in {"повтори", "повторить", "еще раз"})
     if not recognized and not followup:
-        return spoken_response("Я пока отвечаю на вопросы об ограничениях. " + HELP)
+        return spoken_response("Не распознала команду. " + HELP, outcome="unrecognized")
     from . import alice_oauth as oauth
     if not oauth.has_scope(oauth.SCOPE):
-        return spoken_response("Для ограничений переподключите аккаунт и разрешите чтение ограничений.", end=True)
+        return spoken_response("Для ограничений переподключите аккаунт и разрешите чтение ограничений.", outcome="permission_required")
     children = list_children()
     tokens = set(text.split())
     matches = [child for child in children if any(f" {variant} " in f" {text} " for variant in aliases(child["name"]))]
@@ -213,6 +228,7 @@ def answer(payload):
     selected = [r for r in restrictions if (child_id is None or r["child_id"] == child_id)
                 and (topic is None or type_matches(r, topic))]
     current = active_on(selected, day)
+    g.alice_outcome = "handled"
     if mode in {"permission", "until"}:
         child = next((c for c in children if c["id"] == child_id), None)
         if child is None:
@@ -234,7 +250,7 @@ def answer(payload):
             continue
         for row in rows:
             line = f"{clean_label(child['name'])}: {clean_label(row['type_name'])}, последний день — {date.fromisoformat(row['end_date']):%d.%m.%Y}."
-            if sum(len(s) for s in lines) + len(line) > 1700:
+            if sum(len(s) + 1 for s in lines) + len(line) > 900:
                 lines.append("Остальные ограничения можно посмотреть в приложении FamilyApp.")
                 return spoken_response(" ".join(lines), end=True, context=context)
             lines.append(line)

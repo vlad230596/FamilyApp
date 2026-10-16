@@ -1,0 +1,107 @@
+name: Create FamilyApp release
+
+# The single entry point for a new release. The version is computed here, from
+# the tags on origin -- never typed. Agents kept picking a number from a stale
+# local clone and colliding with a tag CI had already pushed; "how big is the
+# change" is the only thing worth asking (see AGENTS.md).
+#
+# This workflow creates the tag and the GitHub Release, then dispatches
+# release.yml (images + deploy) and apk-release.yml (signed APK) for that tag.
+# A release created with GITHUB_TOKEN does not fire `release: published`, so
+# the explicit dispatch is what starts them -- exactly once each.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: How big the change is -- the next version is computed from the latest tag on origin
+        required: true
+        type: choice
+        options:
+          - minor
+          - patch
+          - major
+        default: minor
+      version:
+        description: Exact version instead of bump (rarely needed; must be newer than the latest tag)
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: familyapp-create-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Validate release input
+        id: release
+        env:
+          BUMP: ${{ inputs.bump }}
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" != 'refs/heads/main' ]]; then
+            echo 'Release workflow must be started from main.' >&2
+            exit 64
+          fi
+          # The latest release is the highest SemVer-core tag on origin -- the
+          # remote, not this checkout, so a tag pushed a minute ago counts.
+          # Tags carry no `v` prefix (see AGENTS.md).
+          latest="$(git ls-remote --tags --refs origin \
+            | sed -E 's#.*refs/tags/##' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -n 1)"
+          latest="${latest:-0.0.0}"
+          IFS=. read -r major minor patch <<< "$latest"
+          case "$BUMP" in
+            major) next="$((major + 1)).0.0" ;;
+            minor) next="${major}.$((minor + 1)).0" ;;
+            patch) next="${major}.${minor}.$((patch + 1))" ;;
+            *) echo "Unknown bump: $BUMP" >&2; exit 64 ;;
+          esac
+          VERSION="${REQUESTED:-$next}"
+          newest="$(printf '%s\n%s\n' "$latest" "$REQUESTED" | sort -V | tail -n 1)"
+          if [[ -n "$REQUESTED" && ( "$newest" != "$REQUESTED" || "$REQUESTED" == "$latest" ) ]]; then
+            echo "Requested $REQUESTED is not newer than the latest tag $latest." >&2
+            exit 65
+          fi
+          echo "Latest tag on origin: $latest -> releasing $VERSION ($([[ -n "$REQUESTED" ]] && echo exact || echo "$BUMP"))"
+          echo "### Releasing $VERSION (latest was $latest)" >> "$GITHUB_STEP_SUMMARY"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Release tag must be a SemVer core such as 1.0.0 (no v prefix).' >&2
+            exit 64
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists." >&2
+            exit 65
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          gh release create "$VERSION" --target "$RELEASE_SHA" \
+            --title "FamilyApp $VERSION" --generate-notes
+      - name: Start deploy and APK builds
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh workflow run release.yml --ref main -f tag="$VERSION"
+          gh workflow run apk-release.yml --ref main -f tag="$VERSION"
+          echo "Dispatched release.yml and apk-release.yml for $VERSION" >> "$GITHUB_STEP_SUMMARY"

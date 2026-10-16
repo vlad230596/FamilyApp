@@ -11,6 +11,7 @@ python = "^3.11"
 flask = "^3.0.0"
 gunicorn = ">=23,<24"
 tzdata = "^2026.5"
+pymorphy3 = ">=2.0.6,<3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

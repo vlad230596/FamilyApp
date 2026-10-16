@@ -113,13 +113,16 @@ class ChoreNotifications {
         title: reminder['title'] as String,
         body: reminder['kind'] == 'duty'
             ? 'Пора выполнить дежурство. Откройте приложение.'
+            : reminder['schedule'] == 'once'
+            ? 'Пора заняться делом. Отметьте выполнение или отмените.'
             : 'Пора проверить. Выберите «Да» или «Нет».',
         scheduledDate: when,
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             'regular_tasks',
-            'Регулярные задачи',
-            channelDescription: 'Напоминания о назначенных вам проверках',
+            'Дела и дежурства',
+            channelDescription:
+                'Личные напоминания о делах, проверках и дежурствах',
             importance: Importance.high,
             priority: Priority.high,
             visibility: NotificationVisibility.private,
@@ -133,16 +136,16 @@ class ChoreNotifications {
                       cancelNotification: false,
                     ),
                   ]
-                : const [
+                : [
                     AndroidNotificationAction(
                       'yes',
-                      'Да',
+                      reminder['schedule'] == 'once' ? 'Выполнено' : 'Да',
                       showsUserInterface: true,
                       cancelNotification: false,
                     ),
                     AndroidNotificationAction(
                       'no',
-                      'Нет',
+                      reminder['schedule'] == 'once' ? 'Отменить' : 'Нет',
                       showsUserInterface: true,
                       cancelNotification: false,
                     ),

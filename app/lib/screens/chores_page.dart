@@ -41,7 +41,7 @@ class ChoresPage extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Личные напоминания о проверках'),
+                        const Text('Личные напоминания о делах'),
                         const SizedBox(height: 8),
                         TextButton.icon(
                           icon: const Icon(Icons.notifications_active_outlined),
@@ -92,7 +92,7 @@ class ChoresPage extends ConsumerWidget {
                       const Icon(Icons.task_alt, size: 48),
                       const SizedBox(height: 16),
                       const Text(
-                        'Регулярных задач пока нет',
+                        'Задач пока нет',
                         style: TextStyle(fontSize: 20),
                       ),
                       const SizedBox(height: 8),
@@ -124,11 +124,11 @@ class ChoresPage extends ConsumerWidget {
                         if (!chore.active) const Text('Приостановлена'),
                         if (chore.dueDate != null)
                           Text(
-                            'Проверка ${_dateLabel(chore.dueDate!)}: ${chore.dueAnswer == null
+                            '${chore.isOnce ? 'Дело' : 'Проверка'} ${_dateLabel(chore.dueDate!)}: ${chore.dueAnswer == null
                                 ? 'ожидает ответа'
                                 : chore.dueAnswer!
-                                ? 'Да'
-                                : 'Нет'}',
+                                ? (chore.isOnce ? 'Выполнено' : 'Да')
+                                : (chore.isOnce ? 'Отменено' : 'Нет')}',
                           ),
                         ExpansionTile(
                           tilePadding: EdgeInsets.zero,
@@ -169,7 +169,7 @@ class ChoresPage extends ConsumerWidget {
                                         chore.revision,
                                       ),
                                 icon: const Icon(Icons.check),
-                                label: const Text('Да'),
+                                label: Text(chore.isOnce ? 'Выполнено' : 'Да'),
                               ),
                               OutlinedButton.icon(
                                 onPressed: state.busy
@@ -181,7 +181,7 @@ class ChoresPage extends ConsumerWidget {
                                         chore.revision,
                                       ),
                                 icon: const Icon(Icons.close),
-                                label: const Text('Нет'),
+                                label: Text(chore.isOnce ? 'Отменить' : 'Нет'),
                               ),
                             ],
                             TextButton.icon(

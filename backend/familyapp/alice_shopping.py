@@ -8,6 +8,7 @@ from flask import g
 from . import alice_oauth as oauth
 from . import shopping
 from .domain import DomainError
+from .shopping_names import normalize_voice_name
 
 
 def answer_shopping(command, previous, respond, clean):
@@ -30,32 +31,33 @@ def answer_shopping(command, previous, respond, clean):
         return None
     permission = oauth.SHOPPING_READ if read else oauth.SHOPPING_WRITE
     if not oauth.has_scope(permission):
-        return respond("Для списка покупок переподключите аккаунт FamilyApp и разрешите доступ к покупкам.", end=True)
+        return respond("Для списка покупок переподключите аккаунт FamilyApp и разрешите доступ к покупкам.", outcome="permission_required")
     if read:
+        g.alice_outcome = "handled"
         items = shopping.list_shopping()["items"]
         if not items:
             return respond("Список покупок пуст.", end=True)
         lines = ["Нужно купить:"]
         for index, item in enumerate(items):
             label = clean(item["name"])
-            if sum(map(len, lines)) + len(label) + 80 > 1700:
+            if sum(len(line) + 1 for line in lines) + len(label) + 80 > 1000:
                 lines.append(f"Остальные товары — в приложении. Всего в списке {len(items)}.")
                 break
             lines.append(label + ("." if index == len(items) - 1 else ";"))
         return respond(" ".join(lines), end=True)
     match = add or trailing or buy
     if match and match.group(1):
-        # Preserve the original spelling and punctuation of the item name.
+        # Extract the original name before conservative voice normalization.
         start, end = match.span(1)
         name = text[start:end]
     elif pending and not match:
         name = text
     else:
-        return respond("Что добавить в список покупок? Назовите один товар.", context={"pending": "shopping_add"})
+        return respond("Назовите товар в новой команде, например: добавь в список покупок молоко.", context={"pending": "shopping_add"})
     if len(name) > 200 or not re.search(r"[\w]", name):
         return respond("Назовите один товар длиной до двухсот символов.", context={"pending": "shopping_add"})
     try:
-        item = shopping.save_item({"name": name}, actor=g.alice_member_id, raise_duplicate=False)
+        item = shopping.save_item({"name": normalize_voice_name(name)}, actor=g.alice_member_id, raise_duplicate=False)
     except DomainError:
         return respond("Не удалось добавить товар. Проверьте название.", end=True)
-    return respond("В списке покупок: " + clean(item["name"]) + ".", end=True)
+    return respond("В списке покупок: " + clean(item["name"]) + ".", outcome="handled")

@@ -104,8 +104,25 @@ def validate(payload):
     if type(active) is not bool:
         raise DomainError("active must be a boolean")
     start = parse_date(payload.get("start_date"), "start_date")
+    schedule = payload.get("schedule", "recurring")
+    kind = payload.get("kind", "regular")
+    if schedule not in ("recurring", "once") or kind not in ("regular", "penalty"):
+        raise DomainError("invalid duty kind or schedule")
+    if kind == "penalty" and schedule != "once":
+        raise DomainError("penalty duty must be one-time")
+    if schedule == "once":
+        member = payload.get("assigned_member_id")
+        if type(member) is not int:
+            raise DomainError("one-time duty requires an assignee")
+        get_member(member)
+        weekdays, cleaned = [start.isoweekday()], {str(start.isoweekday()): member}
+    reminder_enabled = payload.get("reminder_enabled", True)
+    if type(reminder_enabled) is not bool:
+        raise DomainError("reminder_enabled must be a boolean")
     return dict(title=title.strip(), weekdays=sorted(set(weekdays)), assignments=cleaned,
-                reminder_time=clock, timezone=zone, active=active, start_date=start.isoformat())
+                reminder_time=clock, timezone=zone, active=active, start_date=start.isoformat(),
+                schedule=schedule, kind=kind, reminder_enabled=reminder_enabled,
+                assigned_member_id=payload.get("assigned_member_id") if schedule == "once" else None)
 
 
 def materialize(duty_id):
@@ -119,6 +136,8 @@ def materialize(duty_id):
         today = utc_now().astimezone(ZoneInfo(item["timezone"])).date()
         start = max(date.fromisoformat(row["effective_date"]), date.fromisoformat(item["start_date"]))
         end = min(today, date.fromisoformat(rows[index + 1]["effective_date"]) - timedelta(days=1)) if index + 1 < len(rows) else today
+        if item.get("schedule") == "once":
+            end = min(end, date.fromisoformat(item["start_date"]))
         latest = db.execute("SELECT MAX(occurrence_date) FROM duty_occurrences WHERE duty_id = ? AND revision = ?", (duty_id, row["id"])).fetchone()[0]
         if latest:
             start = max(start, date.fromisoformat(latest) + timedelta(days=1))
@@ -155,6 +174,11 @@ def save_duty(payload, duty_id=None):
             get_duty(duty_id)
             materialize(duty_id)
             previous = revisions(duty_id)[-1]["definition"]
+            if (values["schedule"] != previous.get("schedule", "recurring") or
+                    values["kind"] != previous.get("kind", "regular")):
+                raise DomainError("duty kind and schedule cannot change")
+            if values["schedule"] == "once":
+                raise DomainError("one-time duty cannot be edited after creation")
             # Keep a duty's timezone and initial start stable throughout its history.
             if values["timezone"] != previous["timezone"] or values["start_date"] != previous["start_date"]:
                 raise DomainError("duty start and timezone cannot change")
@@ -207,7 +231,7 @@ def occurrence(occurrence_id):
     return dict(row)
 
 
-def complete(occurrence_id, payload):
+def complete(occurrence_id, payload, *, voice=False):
     if not isinstance(payload, dict):
         raise DomainError("request must be an object")
     db = get_db()
@@ -224,14 +248,16 @@ def complete(occurrence_id, payload):
         get_member(performer)
         if not g.member.is_parent and performer != g.member.id:
             raise PermissionDenied("children may only submit their own duty")
-        rating = payload.get("rating", "normal") if g.member.is_parent else None
-        if g.member.is_parent and rating not in ("bad", "normal", "great"):
+        penalty = revisions(item["duty_id"])[-1]["definition"].get("kind") == "penalty"
+        confirmed = g.member.is_parent and not voice
+        rating = payload.get("rating", "normal") if confirmed and not penalty else None
+        if confirmed and not penalty and rating not in ("bad", "normal", "great"):
             raise DomainError("invalid duty rating")
         db.execute("""UPDATE duty_occurrences SET status = ?, performer_member_id = ?, marked_by_member_id = ?,
             marked_at = ?, confirmed_by_member_id = ?, confirmed_at = ?, rating = ? WHERE id = ?""",
-            ("confirmed" if g.member.is_parent else "pending", performer, g.member.id, now_iso(),
-             g.member.id if g.member.is_parent else None, now_iso() if g.member.is_parent else None, rating, occurrence_id))
-        record_event(occurrence_id)
+            ("confirmed" if confirmed else "pending", performer, g.member.id, now_iso(),
+             g.member.id if confirmed else None, now_iso() if confirmed else None, rating, occurrence_id))
+        record_event(occurrence_id, source="alice" if voice else "app")
     return occurrence(occurrence_id)
 
 
@@ -248,6 +274,8 @@ def review(occurrence_id, payload):
     with db:
         db.execute("BEGIN IMMEDIATE")
         item = occurrence(occurrence_id)
+        if revisions(item["duty_id"])[-1]["definition"].get("kind") == "penalty":
+            rating = None
         if item["status"] != "pending":
             raise DomainError("duty is not awaiting confirmation")
         if is_away(item["occurrence_date"]):
@@ -258,8 +286,9 @@ def review(occurrence_id, payload):
     return occurrence(occurrence_id)
 
 
-def record_event(occurrence_id):
+def record_event(occurrence_id, source="app"):
     snapshot = occurrence(occurrence_id)
+    snapshot["source"] = source
     snapshot["performer_name"] = get_member(snapshot["performer_member_id"])["name"]
     get_db().execute("INSERT INTO duty_events(occurrence_id, actor_member_id, snapshot, created_at) VALUES (?, ?, ?, ?)",
                      (occurrence_id, g.member.id, json.dumps(snapshot), now_iso()))
@@ -277,7 +306,10 @@ def list_duties():
     rows = [dict(row) for row in db.execute("""SELECT o.* FROM duty_occurrences o JOIN duties d ON d.id = o.duty_id
         WHERE d.family_id = ? ORDER BY o.occurrence_date DESC, o.id DESC""", (family_id(),))]
     members = {row["id"]: row["name"] for row in db.execute("SELECT id, name FROM members WHERE family_id = ?", (family_id(),))}
+    by_id = {item["id"]: item for item in definitions}
     for row in rows:
+        row["kind"] = by_id[row["duty_id"]].get("kind", "regular")
+        row["schedule"] = by_id[row["duty_id"]].get("schedule", "recurring")
         row["away"] = is_away(row["occurrence_date"], periods)
         row["assigned_name"] = members.get(row["assigned_member_id"])
         row["performer_name"] = members.get(row["performer_member_id"])
@@ -286,7 +318,7 @@ def list_duties():
     statistics = {member: dict(member_id=member, name=name, missed=0, covered=0, completed=0,
                                pending=0, bad=0, normal=0, great=0, debt=0) for member, name in members.items()}
     for row in rows:
-        if row["away"]:
+        if row["away"] or row["kind"] == "penalty":
             continue
         today = utc_now().astimezone(ZoneInfo(row["timezone"])).date().isoformat()
         assigned = statistics.get(row["assigned_member_id"])
@@ -327,7 +359,9 @@ def reminders():
             if not revision:
                 continue
             item = revision["definition"]
-            if not item["active"] or day.isoformat() < item["start_date"] or day.isoweekday() not in item["weekdays"]:
+            if (not item["active"] or not item.get("reminder_enabled", True)
+                    or day.isoformat() < item["start_date"] or day.isoweekday() not in item["weekdays"]
+                    or (item.get("schedule") == "once" and day.isoformat() != item["start_date"])):
                 continue
             if item["assignments"].get(str(day.isoweekday())) != g.member.id or is_away(day.isoformat(), periods):
                 continue

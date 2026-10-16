@@ -46,6 +46,8 @@ class _DutyDialogState extends ConsumerState<DutyDialog> {
     ),
   );
   late var _active = widget.duty?['active'] as bool? ?? true;
+  late var _penalty = widget.duty?['kind'] == 'penalty';
+  int? _assignee;
   bool _busy = false;
   String? _error;
   @override
@@ -61,6 +63,10 @@ class _DutyDialogState extends ConsumerState<DutyDialog> {
       setState(() => _error = 'Выберите хотя бы один день.');
       return;
     }
+    if (_penalty && _assignee == null) {
+      setState(() => _error = 'Выберите исполнителя штрафного дежурства.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -68,6 +74,9 @@ class _DutyDialogState extends ConsumerState<DutyDialog> {
     final store = ref.read(dutiesStoreProvider.notifier);
     final data = <String, dynamic>{
       'title': _title.text.trim(),
+      'kind': _penalty ? 'penalty' : 'regular',
+      'schedule': _penalty ? 'once' : 'recurring',
+      if (_penalty) 'assigned_member_id': _assignee,
       'timezone': _zone.text.trim(),
       'start_date': dateToIso(_start),
       'weekdays': _weekdays.toList()..sort(),
@@ -109,6 +118,18 @@ class _DutyDialogState extends ConsumerState<DutyDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (widget.duty == null)
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Штрафное дежурство'),
+                      subtitle: const Text(
+                        'Один раз, без влияния на баланс и оценки',
+                      ),
+                      value: _penalty,
+                      onChanged: _busy
+                          ? null
+                          : (value) => setState(() => _penalty = value),
+                    ),
                   TextFormField(
                     controller: _title,
                     enabled: !_busy,
@@ -121,27 +142,46 @@ class _DutyDialogState extends ConsumerState<DutyDialog> {
                         : null,
                   ),
                   const SizedBox(height: 8),
-                  const Text('Дни недели и ответственные'),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (var d = 1; d <= 7; d++)
-                        FilterChip(
-                          label: Text(weekdayLabels[d - 1]),
-                          selected: _weekdays.contains(d),
-                          onSelected: _busy
-                              ? null
-                              : (selected) => setState(() {
-                                  if (selected) {
-                                    _weekdays.add(d);
-                                  } else {
-                                    _weekdays.remove(d);
-                                  }
-                                }),
-                        ),
-                    ],
-                  ),
-                  for (final day in (_weekdays.toList()..sort()))
+                  if (_penalty)
+                    DropdownButtonFormField<int>(
+                      decoration: const InputDecoration(
+                        labelText: 'Исполнитель',
+                      ),
+                      isExpanded: true,
+                      items: [
+                        for (final member in members)
+                          DropdownMenuItem(
+                            value: member.id,
+                            child: Text(member.name),
+                          ),
+                      ],
+                      onChanged: _busy ? null : (value) => _assignee = value,
+                      validator: (value) =>
+                          value == null ? 'Выберите исполнителя' : null,
+                    ),
+                  if (!_penalty) const Text('Дни недели и ответственные'),
+                  if (!_penalty)
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (var d = 1; d <= 7; d++)
+                          FilterChip(
+                            label: Text(weekdayLabels[d - 1]),
+                            selected: _weekdays.contains(d),
+                            onSelected: _busy
+                                ? null
+                                : (selected) => setState(() {
+                                    if (selected) {
+                                      _weekdays.add(d);
+                                    } else {
+                                      _weekdays.remove(d);
+                                    }
+                                  }),
+                          ),
+                      ],
+                    ),
+                  for (final day
+                      in (_penalty ? <int>[] : (_weekdays.toList()..sort())))
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: DropdownButtonFormField<int>(
@@ -224,8 +264,10 @@ class _DutyDialogState extends ConsumerState<DutyDialog> {
                         ? null
                         : (v) => setState(() => _active = v),
                   ),
-                  const Text(
-                    'Ответственный может быть без аккаунта. Изменения расписания и пауза действуют с завтрашнего дня; прошлые назначения сохраняются.',
+                  Text(
+                    _penalty
+                        ? 'Разовое назначение сохраняется в истории. Оно не добавляет долг, компенсацию или оценку в общий зачёт.'
+                        : 'Ответственный может быть без аккаунта. Изменения расписания и пауза действуют с завтрашнего дня; прошлые назначения сохраняются.',
                   ),
                   if (_error != null)
                     Padding(

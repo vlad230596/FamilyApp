@@ -185,6 +185,35 @@ void main() {
     },
   );
 
+  testWidgets('one-time personal task saves one reminder in thirty minutes', (
+    tester,
+  ) async {
+    final api = ChoreApi();
+    await openTasks(tester, api, size: const Size(320, 640));
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Одноразовое дело'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Что нужно сделать'),
+      'Помыть пылесос',
+    );
+    await tester.ensureVisible(find.text('Через 30 минут'));
+    final before = DateTime.now().add(const Duration(minutes: 30));
+    await tester.tap(find.text('Через 30 минут'));
+    await tester.pumpAndSettle();
+    expect(find.text('Интервал в днях'), findsNothing);
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+    expect(api.saved?['schedule'], 'once');
+    expect(api.saved?['title'], 'Помыть пылесос');
+    final at = DateTime.parse(
+      '${api.saved?['start_date']}T${api.saved?['reminder_time']}',
+    );
+    expect(at.difference(before).inSeconds.abs(), lessThan(60));
+    expect(tester.takeException(), isNull);
+  });
+
   test(
     'notification identities are stable and include assignee and revision',
     () {

@@ -42,6 +42,7 @@ class _ChoreDialogState extends ConsumerState<ChoreDialog> {
   late final _weekdays = widget.chore?.weekdays.toSet() ?? <int>{};
   late var _weekdayMode = _weekdays.isNotEmpty;
   late var _active = widget.chore?.active ?? true;
+  late var _once = widget.chore?.isOnce ?? false;
   var _busy = false;
   String? _error;
 
@@ -70,7 +71,7 @@ class _ChoreDialogState extends ConsumerState<ChoreDialog> {
 
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
-    if (_weekdayMode && _weekdays.isEmpty) {
+    if (!_once && _weekdayMode && _weekdays.isEmpty) {
       setState(() => _error = 'Выберите хотя бы один день недели.');
       return;
     }
@@ -81,10 +82,13 @@ class _ChoreDialogState extends ConsumerState<ChoreDialog> {
     final controller = ref.read(choreStoreProvider.notifier);
     final success = await controller.save({
       'title': _title.text.trim(),
+      'schedule': _once ? 'once' : 'recurring',
       'responsible_member_id': _memberId,
       'start_date': dateToIso(_start),
-      'interval_days': _weekdayMode ? 1 : int.parse(_interval.text),
-      'weekdays': _weekdayMode ? (_weekdays.toList()..sort()) : <int>[],
+      'interval_days': _once || _weekdayMode ? 1 : int.parse(_interval.text),
+      'weekdays': !_once && _weekdayMode
+          ? (_weekdays.toList()..sort())
+          : <int>[],
       'reminder_time':
           '${_clock.hour.toString().padLeft(2, '0')}:${_clock.minute.toString().padLeft(2, '0')}',
       'timezone': _zone.text.trim(),
@@ -113,9 +117,7 @@ class _ChoreDialogState extends ConsumerState<ChoreDialog> {
     return PopScope(
       canPop: !_busy,
       child: AlertDialog(
-        title: Text(
-          widget.chore == null ? 'Регулярная задача' : 'Изменить задачу',
-        ),
+        title: Text(widget.chore == null ? 'Новая задача' : 'Изменить задачу'),
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
@@ -125,6 +127,15 @@ class _ChoreDialogState extends ConsumerState<ChoreDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Одноразовое дело'),
+                    subtitle: const Text('Без оценок и подтверждения'),
+                    value: _once,
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(() => _once = value),
+                  ),
                   if (_error != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -139,9 +150,11 @@ class _ChoreDialogState extends ConsumerState<ChoreDialog> {
                     controller: _title,
                     enabled: !_busy,
                     maxLength: 200,
-                    decoration: const InputDecoration(
-                      labelText: 'Что проверять',
-                      hintText: 'Посудомойка запущена?',
+                    decoration: InputDecoration(
+                      labelText: _once ? 'Что нужно сделать' : 'Что проверять',
+                      hintText: _once
+                          ? 'Помыть пылесос'
+                          : 'Посудомойка запущена?',
                     ),
                     validator: (value) => value == null || value.trim().isEmpty
                         ? 'Введите название'
@@ -180,26 +193,29 @@ class _ChoreDialogState extends ConsumerState<ChoreDialog> {
                     'Уведомление и право ответить получает только этот участник.',
                   ),
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<bool>(
-                    initialValue: _weekdayMode,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Повторение'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: false,
-                        child: Text('Каждые N дней'),
+                  if (!_once)
+                    DropdownButtonFormField<bool>(
+                      initialValue: _weekdayMode,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Повторение',
                       ),
-                      DropdownMenuItem(
-                        value: true,
-                        child: Text('По дням недели'),
-                      ),
-                    ],
-                    onChanged: _busy
-                        ? null
-                        : (value) => setState(() => _weekdayMode = value!),
-                  ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: false,
+                          child: Text('Каждые N дней'),
+                        ),
+                        DropdownMenuItem(
+                          value: true,
+                          child: Text('По дням недели'),
+                        ),
+                      ],
+                      onChanged: _busy
+                          ? null
+                          : (value) => setState(() => _weekdayMode = value!),
+                    ),
                   const SizedBox(height: 12),
-                  if (!_weekdayMode)
+                  if (!_once && !_weekdayMode)
                     TextFormField(
                       controller: _interval,
                       enabled: !_busy,
@@ -215,7 +231,7 @@ class _ChoreDialogState extends ConsumerState<ChoreDialog> {
                             : null;
                       },
                     ),
-                  if (_weekdayMode)
+                  if (!_once && _weekdayMode)
                     Wrap(
                       spacing: 8,
                       children: [
@@ -236,6 +252,20 @@ class _ChoreDialogState extends ConsumerState<ChoreDialog> {
                       ],
                     ),
                   const SizedBox(height: 12),
+                  if (_once)
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.timer_outlined),
+                      label: const Text('Через 30 минут'),
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() {
+                              final at = DateTime.now().add(
+                                const Duration(minutes: 30),
+                              );
+                              _start = at;
+                              _clock = TimeOfDay.fromDateTime(at);
+                            }),
+                    ),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.calendar_today_outlined),
                     label: Text(
